@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dixon Charts</title>
+  <link rel="stylesheet" href="/ui/styles.css" />
+  <script src="/ui/vendor/lightweight-charts.standalone.production.js"></script>
+</head>
+<body>
+  <header>
+    <h1>Dixon · <span>Charts</span></h1>
+    <div class="controls">
+      <label class="symbol-picker-label">Symbol
+        <div class="symbol-combo" id="symbolCombo">
+          <input
+            type="text"
+            id="symbolInput"
+            role="combobox"
+            autocomplete="off"
+            spellcheck="false"
+            aria-autocomplete="list"
+            aria-controls="symbolList"
+            aria-expanded="false"
+            placeholder="Search symbol…"
+          />
+          <input type="hidden" id="symbol" value="AAPL" />
+          <ul id="symbolList" class="symbol-list" role="listbox" hidden></ul>
+        </div>
+      </label>
+      <label>Timeframe
+        <select id="timeframe">
+          <option value="daily" selected>Daily</option>
+          <option value="weekly">Weekly</option>
+          <option value="monthly">Monthly</option>
+        </select>
+      </label>
+      <label>From
+        <input type="date" id="from" />
+      </label>
+      <label>To
+        <input type="date" id="to" />
+      </label>
+      <input type="hidden" id="apiKey" value="" />
+      <button id="btnLoad" type="button">Load</button>
+      <button id="btnResetRange" class="secondary" type="button">All history</button>
+      <div id="status"></div>
+    </div>
+  </header>
+
+  <div class="overlays">
+    <div class="group">
+      <span class="group-title">Price</span>
+      <label class="chk"><input type="checkbox" data-ind="MA_20" checked /> MA 20</label>
+      <label class="chk"><input type="checkbox" data-ind="MA_50" checked /> MA 50</label>
+      <label class="chk"><input type="checkbox" data-ind="MA_200" /> MA 200</label>
+      <label class="chk"><input type="checkbox" data-ind="EMA_12" /> EMA 12</label>
+      <label class="chk"><input type="checkbox" data-ind="EMA_26" /> EMA 26</label>
+      <label class="chk"><input type="checkbox" data-ind="BB" checked /> Bollinger 20,2</label>
+    </div>
+    <div class="group">
+      <span class="group-title">Panes</span>
+      <label class="chk"><input type="checkbox" data-pane="rsi" checked /> RSI 14</label>
+      <label class="chk"><input type="checkbox" data-pane="macd" checked /> MACD 12/26/9</label>
+    </div>
+  </div>
+
+  <main>
+    <div id="price-chart" class="chart-pane"><div class="pane-label">OHLC (adjusted)</div></div>
+    <div id="rsi-chart" class="chart-pane"><div class="pane-label">RSI 14</div></div>
+    <div id="macd-chart" class="chart-pane"><div class="pane-label">MACD 12/26/9</div></div>
+  </main>
+
+  <footer>
+    Overlays read server <code>indicator_cache</code> names from
+    <code>indicators/FORMULAS.md</code> (MA_*, EMA_*, RSI_14, MACD_*, BB_*).
+    Indicators are daily-computed; on weekly/monthly they align to bar <code>period_end</code> dates only.
+    Same-origin API · Access or local; no UI key prompt.
+  </footer>
+
+  <script src="/ui/app.js"></script>
+</body>
+</html>

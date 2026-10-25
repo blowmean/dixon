@@ -1,0 +1,126 @@
+# Project Dixon — Market DB PRD v1.1
+
+Approved in Project Dixon group chat · 2026-10-23 (HKT)  
+**v1.1 amendment** · 2026-10-24 (HKT): public HTTPS exposure via Cloudflare on `robonet.cc`  
+**Go-live** · 2026-10-24 (HKT): `https://dixon.robonet.cc/ui/` via Tunnel `dixon-mac11` → mac11 `:8765`; `DIXON_API_KEY` / `X-API-Key` enabled
+
+## Status
+
+**Public UI live:** https://dixon.robonet.cc/ui/  
+Tunnel: `dixon-mac11` → mac11 `127.0.0.1:8765`  
+Auth: Cloudflare Access for browser UI (no key paste); optional `DIXON_API_KEY` for scripts  
+Local UI still: http://127.0.0.1:8765/ui/
+
+## Goal
+
+Personal market database that stores OHLC (daily, weekly, monthly), exposes a batch download API, and provides a web UI with candlestick charts plus technical indicators — available on **local Mac** and over **HTTPS on the public internet** under the existing `robonet.cc` zone.
+
+## v1 decisions (locked)
+
+| Topic | Decision |
+| --- | --- |
+| Universe | **Phase A (locked):** HSI + HSTECH + S&P 500 + Nasdaq-100 + ETFs in-scope; golden set retained. Full exchange lists (~14.7k) on disk for later B/C — no uncapped ingest yet |
+| Feed | Yahoo Finance only (no paid vendor); personal research use |
+| Prices | Split/dividend-adjusted OHLC only |
+| Bars | Persist daily, weekly, monthly (not derive-on-read) |
+| Calendars | Exchange trading calendars (HK half-days, US early closes) |
+| History | 5 years |
+| Refresh | One-shot backfill + daily job; rate-limit Yahoo hard |
+| API clients | Paul + authenticated public HTTPS clients |
+| Hosting | Primary compute on local Mac (`/Users/paul/project-dixon`); public edge via Cloudflare |
+| Charts | Adjusted OHLC candlesticks |
+| Indicators | Server precompute/cache: MA, EMA, RSI, MACD, Bollinger; best-effort vs Yahoo math (not TradingView-certified) |
+| Crypto / bonds | Phase 2 (schema-ready; not Day-1 ingest) |
+
+## Public exposure (v1.1)
+
+**UX lock (2026-10-24):** Asking users to paste `DIXON_API_KEY` in the public UI is **not acceptable**.
+
+
+| Topic | Decision |
+| --- | --- |
+| Domain zone | `robonet.cc` (existing Cloudflare account; other agent keeps apex/`www`) |
+| Hostname | **`dixon.robonet.cc`** (subdomain; path-based `/dixon` only if Paul overrides) |
+| Edge | Cloudflare Tunnel (`cloudflared`) from mac11 → `http://127.0.0.1:8765` |
+| Auth (must) | **Browser:** Cloudflare Access only (no API-key field in `/ui/`). **Scripts:** optional `DIXON_API_KEY` / `X-API-Key`. API accepts Access JWT (`Cf-Access-Jwt-Assertion`) for same-origin UI traffic |
+| Bind | Keep Dixon on `127.0.0.1` locally; do **not** expose raw `0.0.0.0` to the internet (tunnel only) |
+| Availability | Public UI only while mac11 is online and Tunnel is running |
+| Secrets | Cloudflare tokens via masked secret card / Vault / Cloudflare OAuth plugin — **never in group chat** |
+
+
+**Universe expand (2026-10-24):** Paul chose **A**. ETFs **in** (default; aligns with golden SPY). Eng: build Phase A list + rate-limited 5y backfill; searchable UI before list grows.
+
+## In scope
+
+- Symbol registry with `asset_class` (equity first); expand later
+- Ingest: Yahoo backfill + daily EOD job for HK and US sessions
+- Storage: persisted daily / weekly / monthly bars (tables or Parquet partitions)
+- Rebuild weekly/monthly when daily updates or restates land
+- Batch API: download OHLC by symbol(s) and date range (local + authenticated public)
+- Web UI: candlestick charts on adjusted OHLC
+- Server-cached indicators: MA, EMA, RSI, MACD, Bollinger
+- Documented indicator formula sheet for QA
+- Cloudflare Tunnel + DNS for `dixon.robonet.cc`
+- Auth gate (Cloudflare Access and/or API key) before public go-live
+
+## Out of scope / phase 2
+
+- Live ticks / intraday
+- Portfolio, positions, P&L
+- Alerts / notifications
+- Local-LLM chart or signal explanations
+- TradingView-certified indicator parity
+- Crypto (24/7 UTC bars) and bonds — separate ingest path later; prefer liquid bond ETFs (e.g. TLT/IEF) over individual CUSIPs on Yahoo
+- Uncapped Day-1 universe — schema may allow more symbols; ingest starts capped
+- Always-on cloud host (Mac is origin unless Paul later moves compute)
+
+## Architecture notes
+
+- **Suggested store:** DuckDB + Parquet (reuse eng sketch for ~10y equity daily; size for 5y HK+US)
+- **Bar rebuild:** Weekly/monthly rebuilt from daily on exchange calendars after daily land or restates
+- **Yahoo posture:** Best-effort SoT — gaps, delays, silent history rewrites possible; rate-limit the daily job
+- **Local API:** `127.0.0.1:8765` on mac11; UI at `/ui/`
+- **Public path:** Cloudflare Tunnel → local API; DNS CNAME for `dixon.robonet.cc`
+- **Coexistence:** Other agent service retains apex/`www` on `robonet.cc`; Dixon is subdomain-only
+
+## Acceptance (QA)
+
+Correctness is signed off on a small golden-symbol set. Broader universe is smoke/coverage only until expand.
+
+Proposed golden set: `0700.HK`, `0005.HK`, `AAPL`, `MSFT`, `SPY`
+
+Checks:
+
+- Adjusted D/W/M vs Yahoo within 1 tick
+- W/M consistent with daily under exchange calendars (including after restates)
+- MA/EMA/RSI/MACD/Bollinger match the formula sheet vs Yahoo-derived series
+- Batch API: download by symbol/range; clear errors for bad range/symbol
+- Charts: candles render adjusted OHLC; indicators overlay from server cache
+- **Public (v1.1):** Access login → charts load with **no** API-key field; unauthenticated API blocked; scripts may use `X-API-Key`; Tunnel failure fails closed
+
+## Known risks
+
+- Yahoo rate limits and overnight job length constrain universe size
+- HK adjust factors on Yahoo can be weaker than US
+- Silent Yahoo history rewrites — need restate/rebuild path
+- HK vs US session calendars — job must respect both closes
+- Local Mac downtime — daily job may skip; public site down when Mac/Tunnel off
+- Public exposure of Yahoo-derived data — auth required; watch Cloudflare/Yahoo ToS and redistributability
+
+## Next steps
+
+1. Paul delivers Cloudflare credentials via **1:1 masked secret** or Cloudflare OAuth plugin (not group chat)
+2. Eng: Tunnel + DNS for `dixon.robonet.cc` + auth gate
+3. QA: public HTTPS + auth acceptance
+4. Expand Day-1 universe / phase-2 assets later as needed
+
+### Owners
+
+| Role | Owner |
+| --- | --- |
+| Schema / ingest / API / Tunnel | Software Engineer |
+| Delivery | Software Manager |
+| Golden set / acceptance (incl. public auth) | QA Manager |
+| Universe / Yahoo caveats | Financial Expert |
+| ML / LLM path | MLX Agent (out of v1) |
+| This PRD | Project Manager |

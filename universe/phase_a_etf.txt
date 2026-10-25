@@ -1,0 +1,12 @@
+# Phase A index ETFs — refreshed 2026-10-24
+# count=10 SPY/QQQ/HSI/HSTECH proxies
+SPY
+VOO
+IVV
+QQQ
+QQQM
+2800.HK
+2828.HK
+3067.HK
+3033.HK
+3032.HK

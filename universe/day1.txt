@@ -1,0 +1,17 @@
+# Day-1 universe approach: HSI constituents + S&P 500
+# v1 starts with the golden set below; expand by appending tickers.
+# Placeholders: replace FULL_HSI / FULL_SPX sections with live constituent lists
+# (e.g. scraped or vendor snapshot). Schema supports expansion; ingest is rate-limited.
+#
+# --- Golden set (always ingest) ---
+0700.HK
+0005.HK
+AAPL
+MSFT
+SPY
+#
+# --- HSI placeholder (add ~80 HKEX tickers like 0001.HK, 0388.HK, ...) ---
+# FULL_HSI
+#
+# --- S&P 500 placeholder (add ~500 US tickers) ---
+# FULL_SPX

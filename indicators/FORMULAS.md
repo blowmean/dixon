@@ -1,0 +1,134 @@
+# Project Dixon — Indicator Formulas (v1)
+
+**Purpose:** Exact formulas QA can test against.  
+**Posture:** Best-effort vs Yahoo Finance math. **Not** TradingView-certified.  
+**Input series:** Split/dividend-adjusted daily `close` from `daily_bars` (Yahoo `auto_adjust=True`).
+
+All indicators are computed on the **daily** adjusted close series and stored in `indicator_cache` keyed by `(market, symbol, trade_date, name)`.
+
+Warm-up: values are omitted (not written) until `min_periods` is satisfied.
+
+---
+
+## Notation
+
+- \(C_t\) = adjusted close on session \(t\) (chronological trading sessions present in DB)
+- \(n\) = lookback window / period
+- Sessions with no Yahoo bar are **skipped** (no forward-fill)
+
+---
+
+## Simple Moving Average — `MA_{n}`
+
+\[
+\mathrm{MA}_n(t) = \frac{1}{n}\sum_{i=0}^{n-1} C_{t-i}
+\]
+
+- Implementation: `pandas.Series.rolling(window=n, min_periods=n).mean()`
+- Default names: `MA_20`, `MA_50`, `MA_200`
+- First valid point: the \(n\)-th available close
+
+---
+
+## Exponential Moving Average — `EMA_{n}`
+
+Recursive form with \(\alpha = 2 / (n + 1)\):
+
+\[
+\mathrm{EMA}_n(t) = \alpha\, C_t + (1 - \alpha)\, \mathrm{EMA}_n(t-1)
+\]
+
+- Seed: `pandas` `ewm(span=n, adjust=False, min_periods=n)`  
+  (first EMA equals the SMA seed behaviour of pandas `adjust=False` after `min_periods`)
+- Default names: `EMA_12`, `EMA_26`
+
+---
+
+## Relative Strength Index — `RSI_14` (Wilder)
+
+1. \( \Delta_t = C_t - C_{t-1} \)
+2. \( \mathrm{gain}_t = \max(\Delta_t, 0) \), \( \mathrm{loss}_t = \max(-\Delta_t, 0) \)
+3. Wilder smooth (\(\alpha = 1/14\)):
+
+\[
+\overline{G}_t = \alpha\,\mathrm{gain}_t + (1-\alpha)\,\overline{G}_{t-1}
+\]
+\[
+\overline{L}_t = \alpha\,\mathrm{loss}_t + (1-\alpha)\,\overline{L}_{t-1}
+\]
+
+4. \( \mathrm{RS}_t = \overline{G}_t / \overline{L}_t \)
+
+\[
+\mathrm{RSI}_t = 100 - \frac{100}{1 + \mathrm{RS}_t}
+\]
+
+Special cases:
+
+- \(\overline{L}_t = 0\) and \(\overline{G}_t > 0\) → RSI = 100
+- \(\overline{L}_t = 0\) and \(\overline{G}_t = 0\) → RSI = 50
+
+Implementation: `ewm(alpha=1/period, adjust=False, min_periods=period)`.
+
+---
+
+## MACD — `MACD_12_26_9`, `MACD_SIGNAL_12_26_9`, `MACD_HIST_12_26_9`
+
+\[
+\mathrm{MACD}_t = \mathrm{EMA}_{12}(C)_t - \mathrm{EMA}_{26}(C)_t
+\]
+\[
+\mathrm{Signal}_t = \mathrm{EMA}_{9}(\mathrm{MACD})_t
+\]
+\[
+\mathrm{Hist}_t = \mathrm{MACD}_t - \mathrm{Signal}_t
+\]
+
+Cached names:
+
+| Name | Series |
+| --- | --- |
+| `MACD_12_26_9` | MACD line |
+| `MACD_SIGNAL_12_26_9` | Signal line |
+| `MACD_HIST_12_26_9` | Histogram |
+
+---
+
+## Bollinger Bands — `BB_*_20_2`
+
+Population std (`ddof=0`) over the same window as the middle band:
+
+\[
+\mathrm{Mid}_t = \mathrm{MA}_{20}(t)
+\]
+\[
+\sigma_t = \sqrt{\frac{1}{20}\sum_{i=0}^{19}(C_{t-i} - \mathrm{Mid}_t)^2}
+\]
+\[
+\mathrm{Upper}_t = \mathrm{Mid}_t + 2\sigma_t,\quad
+\mathrm{Lower}_t = \mathrm{Mid}_t - 2\sigma_t
+\]
+
+Cached names: `BB_MID_20_2`, `BB_UPPER_20_2`, `BB_LOWER_20_2`.
+
+---
+
+## Weekly / monthly bar rollup (for QA of W/M consistency)
+
+Not indicators, but acceptance-critical:
+
+- **Weekly:** group daily bars by ISO year-week;  
+  open = first open, high = max high, low = min low, close = last close, volume = sum;  
+  `period_end` = last `trade_date` in the group.
+- **Monthly:** group by calendar year-month; same aggregation.
+- Exchange calendars (NYSE / HKEX) define which sessions *can* exist; we only roll dates that Yahoo actually delivered.
+
+See `dixon/calendars.py` and `dixon/rollup.py`.
+
+---
+
+## QA tips
+
+1. Compare golden symbols (`0700.HK`, `0005.HK`, `AAPL`, `MSFT`, `SPY`) adjusted daily close vs Yahoo within 1 tick.
+2. Recompute `MA_20` / `RSI_14` independently from exported closes; match `indicator_cache` within float tolerance (~1e-8 relative or 1e-4 absolute).
+3. Yahoo chart overlays may differ slightly (seed / rounding); Dixon is authoritative for Dixon QA.

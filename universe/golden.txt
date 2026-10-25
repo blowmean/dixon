@@ -1,0 +1,6 @@
+# Project Dixon QA golden set (v1)
+0700.HK
+0005.HK
+AAPL
+MSFT
+SPY
