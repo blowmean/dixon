@@ -644,15 +644,22 @@
   }
 
   async function loadScreener() {
-    const market = $("scrMarket").value;
-    const day = $("scrDate").value;
+    const marketEl = $("scrMarket");
+    const table = $("scrTable");
+    const dayEl = $("scrDate");
+    if (!marketEl || !table) {
+      setHint("scrStatus", "Top 50 controls are not on this page", "error");
+      return;
+    }
+    const market = marketEl.value;
+    const day = dayEl ? dayEl.value : "";
     const q = new URLSearchParams({ market });
     if (day) q.set("date", day);
     setHint("scrStatus", "Loading…");
     try {
       const data = await apiGet(`/screener/top50?${q}`);
-      if (data.date && !$("scrDate").value) $("scrDate").value = data.date;
-      const body = $("scrTable").querySelector("tbody");
+      if (data.date && dayEl && !dayEl.value) dayEl.value = data.date;
+      const body = table.querySelector("tbody");
       body.innerHTML = "";
       (data.rows || []).forEach((row) => {
         const tr = document.createElement("tr");
@@ -906,6 +913,18 @@
     state.equityChart = chart;
   }
 
+  function bindScreener() {
+    const btn = $("btnScreener");
+    if (!btn || btn.dataset.bound === "1") return;
+    btn.dataset.bound = "1";
+    btn.addEventListener("click", () => {
+      loadScreener().catch((err) => {
+        console.error(err);
+        setHint("scrStatus", String(err.message || err), "error");
+      });
+    });
+  }
+
   function wireResearch() {
     document.querySelectorAll(".research-tabs .tab").forEach((btn) => {
       btn.addEventListener("click", () => {
@@ -919,7 +938,7 @@
         }
       });
     });
-    $("btnScreener").addEventListener("click", loadScreener);
+    bindScreener();
     $("rulesEditor").addEventListener("change", (e) => {
       const row = e.target.closest(".cond");
       if (row && e.target.classList.contains("cond-type")) syncCondRow(row);
@@ -1043,16 +1062,28 @@
   }
 
   async function boot() {
-    wire();
-    ensureCharts();
-    await loadSymbols();
-    await loadChart();
+    // Bind and fetch Top 50 before chart setup. A throw or a hung loadChart()
+    // must not leave #btnScreener without a listener or skip /screener/top50.
+    bindScreener();
+    const screenerTask = loadScreener().catch((err) => {
+      console.error(err);
+      setHint("scrStatus", String(err.message || err), "error");
+    });
+    try {
+      wire();
+      ensureCharts();
+      await loadSymbols();
+      await loadChart();
+    } catch (err) {
+      console.error(err);
+      if ($("status")) setStatus(String(err.message || err), "error");
+    }
     try {
       await reloadStrategies();
     } catch (_) {
       /* strategies stay empty until the API is reachable */
     }
-    loadScreener();
+    await screenerTask;
   }
 
   if (document.readyState === "loading") {
