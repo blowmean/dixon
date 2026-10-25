@@ -136,12 +136,29 @@ button.secondary { background: transparent; border-color: var(--border); font-we
 #status.error { color: var(--down); }
 #status.warn { color: var(--warn); }
 
-main { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 420px; }
+/* Charts and research share a row from 1200px up; below that, research stacks under the charts. */
+.workspace {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+}
+main {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 420px;
+  min-width: 0;
+  /* Chart canvases get explicit pixel heights; don't let those inflate the column. */
+  overflow: hidden;
+}
 .chart-pane {
   position: relative; border-bottom: 1px solid var(--border);
-  min-height: 120px;
+  min-height: 0;
 }
-#price-chart { flex: 3; min-height: 280px; }
+#price-chart { flex: 3; }
 #rsi-chart { flex: 1; }
 #macd-chart { flex: 1; }
 .pane-label {
@@ -154,6 +171,9 @@ main { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 420px;
   background: #121820;
   max-height: 46vh;
   overflow: auto;
+  min-width: 0;
+  container-type: inline-size;
+  container-name: research;
 }
 .research-tabs {
   display: flex; gap: 6px; padding: 8px 14px 0;
@@ -183,10 +203,12 @@ tbody tr:hover { background: var(--hover); }
   display: grid;
   grid-template-columns: minmax(160px, 220px) 1fr;
   gap: 12px;
+  min-width: 0;
 }
 @media (max-width: 800px) {
   .strategy-layout { grid-template-columns: 1fr; }
 }
+.strategy-form { min-width: 0; }
 .strategy-list {
   list-style: none; margin: 0; padding: 0; max-height: 280px; overflow: auto;
   border: 1px solid var(--border); border-radius: 8px;
@@ -197,6 +219,17 @@ tbody tr:hover { background: var(--hover); }
 .strategy-list li.active, .strategy-list li:hover { background: var(--hover); }
 .strategy-list .sym { color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; }
 .strategy-form input[type="text"], .strategy-form input[type="number"] { min-width: 88px; }
+/* The research column is often narrower than the viewport, so stack the
+   strategy list over the form when that column itself is tight. */
+@container research (max-width: 640px) {
+  .strategy-layout { grid-template-columns: 1fr; }
+  .strategy-list { max-height: 148px; }
+  .strategy-form .research-bar > label { flex: 1 1 7.5rem; min-width: 0; }
+  .strategy-form .research-bar > label:has(#stName) { flex: 2.2 1 12rem; }
+  .strategy-form input[type="text"],
+  .strategy-form input[type="number"],
+  .strategy-form select { width: 100%; min-width: 0; max-width: 100%; }
+}
 .rules-side {
   border: 1px solid var(--border); border-radius: 8px; padding: 8px; margin-bottom: 8px;
 }
@@ -216,6 +249,42 @@ tbody tr:hover { background: var(--hover); }
 .equity-chart { height: 180px; margin: 8px 0; border: 1px solid var(--border); border-radius: 8px; }
 .cost-overrides { margin: 4px 0 8px; color: var(--muted); font-size: 12px; }
 .cost-overrides summary { cursor: pointer; margin-bottom: 6px; }
+
+@media (min-width: 1200px) {
+  .workspace {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) clamp(600px, 38vw, 800px);
+    grid-template-rows: minmax(0, 1fr);
+    align-items: stretch;
+    min-height: 0;
+    overflow: hidden;
+  }
+  main {
+    min-height: 0;
+    overflow: hidden;
+  }
+  #research {
+    max-height: none;
+    border-top: none;
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  #research .tab-panel:not([hidden]) {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  #tab-screener:not([hidden]) { overflow: hidden; }
+  #tab-screener:not([hidden]) .table-wrap {
+    flex: 1 1 auto;
+    max-height: none;
+    min-height: 160px;
+  }
+  #tab-strategy:not([hidden]) { overflow: auto; }
+}
 
 footer {
   padding: 6px 14px; font-size: 11px; color: var(--muted);
