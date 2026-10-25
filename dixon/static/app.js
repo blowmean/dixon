@@ -45,6 +45,7 @@
     equityChart: null,
     strategies: [],
     editingId: null,
+    chartBox: "",
   };
 
   const MA_MENU = [5, 9, 20, 30, 50, 100, 250];
@@ -196,7 +197,11 @@
       });
     });
 
+    const chartColumn = document.querySelector("main");
     window.addEventListener("resize", resizeCharts);
+    if (typeof ResizeObserver !== "undefined" && chartColumn) {
+      new ResizeObserver(() => resizeCharts()).observe(chartColumn);
+    }
     resizeCharts();
   }
 
@@ -207,12 +212,19 @@
     const showMacd = $("macd-chart").style.display !== "none";
     const w = main.clientWidth;
     const h = main.clientHeight;
+    const box = w + "x" + h + ":" + showRsi + ":" + showMacd;
+    if (box === state.chartBox || w < 2 || h < 2) return;
+    state.chartBox = box;
     let panes = 1 + (showRsi ? 1 : 0) + (showMacd ? 1 : 0);
     const priceH = Math.floor(h * (panes === 1 ? 1 : panes === 2 ? 0.7 : 0.55));
     const otherH = Math.floor((h - priceH) / Math.max(1, panes - 1));
     state.priceChart.applyOptions({ width: w, height: priceH });
     if (showRsi) state.rsiChart.applyOptions({ width: w, height: otherH });
     if (showMacd) state.macdChart.applyOptions({ width: w, height: otherH });
+    if (state.equityChart) {
+      const eq = $("equity-chart");
+      if (eq && eq.clientWidth) state.equityChart.applyOptions({ width: eq.clientWidth });
+    }
   }
 
   function clearPriceOverlays() {
