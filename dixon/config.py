@@ -31,6 +31,10 @@ API_HOST = os.environ.get("DIXON_API_HOST", "127.0.0.1")
 API_PORT = int(os.environ.get("DIXON_API_PORT", "8765"))
 API_KEY = os.environ.get("DIXON_API_KEY", "")  # empty = no auth required
 
+# Owner email for localhost and X-API-Key callers (no Access JWT).
+# Browser users behind Cloudflare Access are attributed by the JWT email claim.
+DEFAULT_OWNER = os.environ.get("DIXON_DEFAULT_OWNER", "paul.kf.leung@gmail.com").strip().lower()
+
 # Exchange calendar names (exchange_calendars package)
 CALENDAR_BY_MARKET = {
     "US": "XNYS",   # NYSE — covers US equities early closes

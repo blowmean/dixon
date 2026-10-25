@@ -50,9 +50,14 @@
 
   <div class="overlays">
     <div class="group">
-      <span class="group-title">Price</span>
+      <span class="group-title">SMA menu</span>
+      <label class="chk"><input type="checkbox" data-ind="MA_5" /> MA 5</label>
+      <label class="chk"><input type="checkbox" data-ind="MA_9" /> MA 9</label>
       <label class="chk"><input type="checkbox" data-ind="MA_20" checked /> MA 20</label>
+      <label class="chk"><input type="checkbox" data-ind="MA_30" /> MA 30</label>
       <label class="chk"><input type="checkbox" data-ind="MA_50" checked /> MA 50</label>
+      <label class="chk"><input type="checkbox" data-ind="MA_100" /> MA 100</label>
+      <label class="chk"><input type="checkbox" data-ind="MA_250" /> MA 250</label>
       <label class="chk"><input type="checkbox" data-ind="MA_200" /> MA 200</label>
       <label class="chk"><input type="checkbox" data-ind="EMA_12" /> EMA 12</label>
       <label class="chk"><input type="checkbox" data-ind="EMA_26" /> EMA 26</label>
@@ -71,11 +76,122 @@
     <div id="macd-chart" class="chart-pane"><div class="pane-label">MACD 12/26/9</div></div>
   </main>
 
+  <section id="research">
+    <div class="research-tabs">
+      <button type="button" class="tab active" data-tab="screener">Top 50</button>
+      <button type="button" class="tab" data-tab="strategy">Strategies</button>
+    </div>
+
+    <div id="tab-screener" class="tab-panel">
+      <div class="research-bar">
+        <label>Market
+          <select id="scrMarket">
+            <option value="US">US</option>
+            <option value="HK">HK</option>
+          </select>
+        </label>
+        <label>Session
+          <input type="date" id="scrDate" />
+        </label>
+        <button id="btnScreener" type="button">Load Top 50</button>
+        <span id="scrStatus" class="hint"></span>
+      </div>
+      <div class="table-wrap">
+        <table id="scrTable">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Symbol</th>
+              <th>Close</th>
+              <th>Turnover</th>
+              <th>Day gain</th>
+              <th>Spike</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="tab-strategy" class="tab-panel" hidden>
+      <div class="strategy-layout">
+        <div class="strategy-list-col">
+          <div class="research-bar">
+            <button id="btnNewStrategy" type="button" class="secondary">New</button>
+            <button id="btnReloadStrategies" type="button" class="secondary">Refresh</button>
+          </div>
+          <ul id="strategyList" class="strategy-list"></ul>
+        </div>
+        <form id="strategyForm" class="strategy-form">
+          <div class="research-bar">
+            <label>Name
+              <input type="text" id="stName" required maxlength="120" placeholder="Strategy name" />
+            </label>
+            <label>Symbol
+              <input type="text" id="stSymbol" required maxlength="32" placeholder="AAPL" />
+            </label>
+            <label>Timeframe
+              <select id="stTimeframe">
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+                <option value="monthly">Monthly</option>
+              </select>
+            </label>
+            <button id="btnUseChartSymbol" type="button" class="secondary">Use chart symbol</button>
+            <button id="btnSaveStrategy" type="submit">Save</button>
+            <button id="btnDeleteStrategy" type="button" class="secondary">Delete</button>
+          </div>
+          <div id="rulesEditor"></div>
+          <div class="research-bar backtest-bar">
+            <label>Backtest from
+              <input type="date" id="btStart" />
+            </label>
+            <label>To
+              <input type="date" id="btEnd" />
+            </label>
+            <button id="btnBacktest" type="button">Run backtest</button>
+            <span id="stStatus" class="hint"></span>
+          </div>
+          <details class="cost-overrides">
+            <summary>Cost overrides (blank = PRD defaults)</summary>
+            <div class="research-bar">
+              <label>HK commission bps <input type="number" id="cHkBps" step="0.1" min="0" placeholder="25" /></label>
+              <label>HK spread ticks <input type="number" id="cHkTicks" step="0.1" min="0" placeholder="2" /></label>
+              <label>US $/share <input type="number" id="cUsShare" step="0.001" min="0" placeholder="0.005" /></label>
+              <label>US min $ <input type="number" id="cUsMin" step="0.01" min="0" placeholder="1" /></label>
+              <label>US spread bps/side <input type="number" id="cUsBps" step="0.1" min="0" placeholder="5" /></label>
+              <label>Equity fraction <input type="number" id="cFrac" step="0.01" min="0.01" max="1" placeholder="0.20" /></label>
+            </div>
+          </details>
+          <div id="btMetrics" class="metrics"></div>
+          <div id="equity-chart" class="equity-chart"></div>
+          <div class="table-wrap">
+            <table id="btTrades">
+              <thead>
+                <tr>
+                  <th>Side</th>
+                  <th>Entry</th>
+                  <th>Exit</th>
+                  <th>Shares</th>
+                  <th>Entry px</th>
+                  <th>Exit px</th>
+                  <th>P&amp;L</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </form>
+      </div>
+    </div>
+  </section>
+
   <footer>
-    Overlays read server <code>indicator_cache</code> names from
-    <code>indicators/FORMULAS.md</code> (MA_*, EMA_*, RSI_14, MACD_*, BB_*).
-    Indicators are daily-computed; on weekly/monthly they align to bar <code>period_end</code> dates only.
-    Same-origin API · Access or local; no UI key prompt.
+    SMA menu (5 / 9 / 20 / 30 / 50 / 100 / 250) and the other overlays are cached in
+    <code>indicator_cache</code> on the selected timeframe (D/W/M).
+    Top-50 turnover pools are separate for HK and US. Strategies are private to the Access email
+    (or <code>DIXON_DEFAULT_OWNER</code> on localhost / API key).
+    Win rate target &gt; 50% and max drawdown target 10% are display-only.
   </footer>
 
   <script src="/ui/app.js"></script>

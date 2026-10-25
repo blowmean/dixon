@@ -2,8 +2,8 @@
 
 Local Mac market database: Yahoo Finance adjusted OHLC, persisted daily / weekly / monthly bars, server-cached indicators, personal batch API.
 
-**In v1:** HK + US equities (HSI + S&P 500 Day-1 approach; golden set for QA).  
-**Out of v1:** live ticks, portfolio, alerts, LLM, charts UI, crypto/bonds (schema `asset_class` hook only).
+**In v1 / v1.2:** HK + US equities, persisted D/W/M bars, charts with volume, cached indicators, Top-50 turnover screener, owner-only strategy backtests.  
+**Out:** live ticks, broker execution, alerts, shared strategies, fundamentals, crypto/bonds (schema `asset_class` hook only).
 
 PRD: see `/workspace/dixon-prd/Dixon.md` (or your copy). Evolved from `market-data-duckdb/` sketch.
 
@@ -37,7 +37,10 @@ export DIXON_RESTATE_DAYS=14         # daily job overwrite window
 export DIXON_API_HOST=127.0.0.1
 export DIXON_API_PORT=8765
 export DIXON_API_KEY=                  # empty = no auth; set for X-API-Key header
+export DIXON_DEFAULT_OWNER=paul.kf.leung@gmail.com
 ```
+
+`DIXON_DEFAULT_OWNER` is the strategy owner for localhost and `X-API-Key` callers. A Cloudflare Access JWT (`Cf-Access-Jwt-Assertion`) attributes strategies to its `email` claim instead.
 
 ## Apply schema
 
@@ -147,9 +150,17 @@ python -m dixon.api
 | `GET /symbols` | Active tickers for pickers |
 | `GET /bars?symbol=AAPL&timeframe=daily&from=2024-01-01&to=2024-12-31` | Single symbol; `timeframe=daily\|weekly\|monthly` |
 | `GET /bars/batch?symbols=AAPL,MSFT,0700.HK&timeframe=daily&from=&to=` | Multi-ticker (max **50**); market inferred per ticker (`.HK`→HK) unless `market=` set for all |
-| `GET /indicators?symbol=AAPL&name=RSI_14&from=2024-01-01` | Cached series |
+| `GET /indicators?symbol=AAPL&name=RSI_14&from=2024-01-01` | One cached series. `timeframe=daily\|weekly\|monthly` (default daily). Missing series are computed and cached |
+| `GET /indicators?symbol=AAPL&names=MA_5,MA_20&timeframe=weekly` | Several series in one response (`series` is a map) |
+| `GET /screener/top50?market=HK\|US&date=YYYY-MM-DD` | That market's Top-50 by turnover. `date` defaults to the latest session |
+| `GET /strategies` | Strategies owned by the caller |
+| `POST /strategies` | Create one (`name`, `symbol`, `timeframe`, `rules`) |
+| `GET /strategies/{id}` | Owner-only |
+| `PUT /strategies/{id}` | Replace name, symbol, timeframe, rules |
+| `DELETE /strategies/{id}` | Owner-only |
+| `POST /strategies/{id}/backtest` | Body: `start`, `end`, optional `costs` |
 
-Optional: `Header X-API-Key: $DIXON_API_KEY` when key is set.
+Optional: `Header X-API-Key: $DIXON_API_KEY` when key is set. Browser traffic may send `Cf-Access-Jwt-Assertion` instead.
 
 Empty single-symbol `bars` with `count: 0` means no ingested data (not an error).
 
@@ -197,12 +208,93 @@ python -m dixon.api
 
 - Symbol picker: DB active symbols (falls back to golden set)
 - Timeframe: daily / weekly / monthly (adjusted OHLC from `/bars`)
-- Price pane: MA / EMA / Bollinger from `/indicators` (`MA_20`, `MA_50`, `MA_200`, `EMA_12`, `EMA_26`, `BB_*_20_2`)
+- Price pane: candlesticks with the bottom ~25% reserved for the volume histogram (`priceScale("right")` bottom 0.25, volume scale top 0.75)
+- SMA menu: 5, 9, 20, 30, 50, 100, 250, plus existing MA 200 / EMA 12 / EMA 26 / Bollinger
 - Lower panes: `RSI_14`, `MACD_12_26_9` + signal + hist (see `indicators/FORMULAS.md`)
-- Weekly/monthly: overlays align daily cache points to each bar’s `period_end` (no browser recompute)
-- Optional API key: paste into the UI field (sent as `X-API-Key`); stored in `localStorage`
+- Weekly/monthly: overlays are computed on that timeframe's bars (cached on first use)
+- Top-50 panel and a private strategy editor (save, then run a dated backtest: equity curve, trades, win rate, max drawdown)
+- No API-key field. Same-origin Access or localhost; scripts may still send `X-API-Key`
 
 Static files: `dixon/static/` (`index.html`, `app.js`, `styles.css`, `vendor/lightweight-charts…`).
+
+## v1.2 screener, strategies, backtest
+
+### Top-50 (`GET /screener/top50?market=HK|US&date=YYYY-MM-DD`)
+
+Separate HK and US pools, ranked by turnover = close × volume in **local currency** (no FX merge). `date` defaults to the latest session in that market. Fewer than 50 names returns the whole pool.
+
+A row's `spike` is true only when that symbol is **inside** the pool and all three hold:
+
+- close > prior 5-session high (max `high` of the previous 5 bars)
+- day gain (close / previous close − 1) ≥ 5%
+- SMA(30) rising: SMA30_t > SMA30_{t−1}
+
+### Strategy rules
+
+One symbol per strategy. `timeframe` is `daily`, `weekly`, or `monthly`. Each of `long`, `flat`, and `short` is `{logic: AND|OR, conditions: [...]}`.
+
+| `type` | Fields | Meaning |
+| --- | --- | --- |
+| `price_gt_ma` / `price_lt_ma` | `window` | close vs SMA(window) |
+| `ma_slope_gt_0` / `ma_slope_lt_0` | `window` | SMA_t vs SMA_{t−1} |
+| `ma_stack` | `windows` (e.g. `[5,20,50]`), `direction` `up` or `down` | 5>20>50 or 5<20<50 |
+| `top50_spike` | — | this bar's session (weekly/monthly: `period_end`) is a daily Top-50 spike |
+
+Windows must be the fixed menu: 5, 9, 20, 30, 50, 100, 250. An empty side never fires. If long and short both fire, the target is flat; otherwise long, then short, then the flat rule, otherwise hold. The fill is the **next stored bar's open**.
+
+```bash
+curl -s -X POST localhost:8765/strategies \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "name": "AAPL SMA20",
+    "symbol": "AAPL",
+    "timeframe": "daily",
+    "rules": {
+      "long": {"logic": "AND", "conditions": [
+        {"type": "price_gt_ma", "window": 20},
+        {"type": "ma_slope_gt_0", "window": 20},
+        {"type": "top50_spike"}
+      ]},
+      "flat": {"logic": "OR", "conditions": [{"type": "price_lt_ma", "window": 20}]},
+      "short": {"logic": "AND", "conditions": []}
+    }
+  }'
+```
+
+List, get, update, and delete only return rows for the owning email. Another Access email gets 404.
+
+### Backtest (`POST /strategies/{id}/backtest`)
+
+```json
+{ "start": "2024-01-01", "end": "2024-12-31", "costs": {} }
+```
+
+Omit `costs` (or leave a key out) for the PRD defaults:
+
+| | HK | US |
+| --- | --- | --- |
+| Capital | HKD 500,000 | USD 100,000 |
+| Commission | 25 bps of notional / side | $0.005 / share, minimum $1 |
+| Bid-ask | spread width **2 ticks** on the HKEX price-band table; **each fill pays half** (1 tick / side) | **5 bps of price each side** |
+
+Sizing is 20% of marked equity per entry (`equity_fraction`). The book allows concurrent names while gross entry notional fits inside equity (about five 20% tickets) and refuses a sixth. A strategy has one symbol, so one run holds at most one position. Shorts are synthetic (no borrow). Dividends are ignored. An open position at `end` is marked to that bar's close (`open_position`); it is not force-flattened.
+
+`metrics.win_rate` and `metrics.max_drawdown` are display-only against targets 50% and 10%. They do not fail the run.
+
+```bash
+python scripts/golden_backtest.py
+# or: python -m pytest tests/test_golden_backtest.py
+```
+
+The golden case is AAPL, 2024-01-02 through 2024-01-15, long while close > SMA(5) and flat while close < SMA(5), default US costs: **1 trade, P&L −6,700, ending equity 93,300**.
+
+Implementation choices worth knowing on the live host:
+
+- Fills use the next **stored** bar (the exchange calendar is already baked into `daily_bars` / rollups).
+- HK “2 ticks” is the spread width. Each side pays half of that (1 tick at the default), using the HKEX band for the fill price.
+- Shares are fractional. HK board lots are not rounded.
+- One strategy, one symbol, so a single backtest holds one position. The book still sizes at 20% and will refuse a sixth concurrent name or a ticket that would push gross entry notional above equity.
+- The JWT email is read but not signature-checked here. Cloudflare Access already authenticated the browser; localhost and API-key calls cannot present that header from the public hostname (see `_check_key`).
 
 ## Layout
 
@@ -259,6 +351,8 @@ python -m dixon.compute_indicators --symbols AAPL
 python -m dixon.api &
 curl -s 'http://127.0.0.1:8765/health'
 curl -s 'http://127.0.0.1:8765/bars?symbol=AAPL&timeframe=daily&from=2025-01-01' | head
+curl -s 'http://127.0.0.1:8765/screener/top50?market=US'
+python scripts/golden_backtest.py
 ```
 
 ## Host

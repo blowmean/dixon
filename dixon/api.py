@@ -21,8 +21,25 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
+from pydantic import BaseModel, Field
+
+from dixon.auth import owner_email
+from dixon.backtest import run_backtest
+from dixon.compute_indicators import (
+    ensure_indicators,
+    list_indicator_names,
+    read_indicator,
+)
 from dixon.config import API_HOST, API_KEY, API_PORT, DB_PATH, GOLDEN_FILE
-from dixon.db import connect
+from dixon.db import connect, session
+from dixon.screener import build_top50
+from dixon.strategies import (
+    create_strategy,
+    delete_strategy,
+    get_strategy,
+    list_strategies,
+    update_strategy,
+)
 from dixon.yahoo import infer_market
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -59,6 +76,34 @@ def _check_key(
     if host in {"127.0.0.1", "localhost", "::1"}:
         return
     raise HTTPException(status_code=401, detail="Invalid or missing X-API-Key")
+
+
+def require_owner(
+    request: Request,
+    x_api_key: Optional[str] = Header(default=None),
+    cf_access_jwt_assertion: Optional[str] = Header(
+        default=None, alias="Cf-Access-Jwt-Assertion"
+    ),
+) -> str:
+    """Authenticated owner email. Access JWT wins; otherwise the default owner."""
+    _check_key(request, x_api_key, cf_access_jwt_assertion)
+    try:
+        return owner_email(cf_access_jwt_assertion)
+    except ValueError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+
+
+class StrategyBody(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    symbol: str = Field(min_length=1, max_length=32)
+    timeframe: Literal["daily", "weekly", "monthly"] = "daily"
+    rules: dict[str, Any]
+
+
+class BacktestBody(BaseModel):
+    start: date
+    end: date
+    costs: Optional[dict[str, Any]] = None
 
 
 def _iso_dates(record: dict[str, Any]) -> dict[str, Any]:
@@ -359,72 +404,165 @@ def get_bars_batch(
     }
 
 
+def _indicator_names(name: str | None, names: str | None) -> list[str]:
+    if names:
+        parsed = []
+        seen: set[str] = set()
+        for part in names.split(","):
+            item = part.strip().upper()
+            if not item or item in seen:
+                continue
+            seen.add(item)
+            parsed.append(item)
+        if not parsed:
+            raise HTTPException(400, "names must list at least one indicator")
+        return parsed
+    if name:
+        return [name.strip().upper()]
+    raise HTTPException(400, "pass name or names")
+
+
 @app.get("/indicators")
 def get_indicators(
     symbol: str = Query(...),
-    name: str = Query(..., description="e.g. MA_20, RSI_14, MACD_12_26_9"),
+    name: Optional[str] = Query(None, description="e.g. MA_20, RSI_14, MACD_12_26_9"),
+    names: Optional[str] = Query(
+        None,
+        description="Comma-separated series computed in one pass, e.g. MA_5,MA_20,MA_50",
+    ),
+    timeframe: Timeframe = Query("daily"),
     market: Optional[str] = Query(None),
     from_: Optional[date] = Query(None, alias="from"),
     to: Optional[date] = Query(None),
     _: None = Depends(_check_key),
 ):
+    """Cached indicator series. Missing or stale names are computed and stored.
+
+    `timeframe=daily|weekly|monthly` uses that bar series (on-demand for W/M and
+    for SMA windows outside the daily job). `name` keeps the original single-series
+    response; `names` returns a map of series.
+    """
     symbol = symbol.strip().upper()
-    name = name.strip().upper()
+    requested = _indicator_names(name, names)
     market_u = _resolve_market(symbol, market)
 
-    clauses = ["market = ?", "symbol = ?", "name = ?"]
-    params: list[Any] = [market_u, symbol, name]
-    if from_ is not None:
-        clauses.append("trade_date >= ?")
-        params.append(from_)
-    if to is not None:
-        clauses.append("trade_date <= ?")
-        params.append(to)
-    where = " AND ".join(clauses)
+    with session() as con:
+        try:
+            ensure_indicators(con, market_u, symbol, timeframe, requested)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        available = list_indicator_names(con, market_u, symbol, timeframe)
+        by_name = {
+            item: read_indicator(con, market_u, symbol, timeframe, item, from_, to)
+            for item in requested
+        }
 
-    con = connect()
-    try:
-        rows = con.execute(
-            f"""
-            SELECT trade_date AS date, value
-            FROM indicator_cache
-            WHERE {where}
-            ORDER BY trade_date
-            """,
-            params,
-        ).fetchdf()
-        available = [
-            r[0]
-            for r in con.execute(
-                """
-                SELECT DISTINCT name FROM indicator_cache
-                WHERE market = ? AND symbol = ? ORDER BY 1
-                """,
-                [market_u, symbol],
-            ).fetchall()
-        ]
-    finally:
-        con.close()
+    if names:
+        return {
+            "market": market_u,
+            "symbol": symbol,
+            "timeframe": timeframe,
+            "from": from_.isoformat() if from_ else None,
+            "to": to.isoformat() if to else None,
+            "available_names": available,
+            "series": by_name,
+        }
 
-    series = []
-    for r in rows.to_dict(orient="records"):
-        d = r["date"]
-        if hasattr(d, "date"):
-            d = d.date().isoformat()
-        elif hasattr(d, "isoformat"):
-            d = d.isoformat()
-        series.append({"date": d, "value": r["value"]})
-
+    series = by_name[requested[0]]
     return {
         "market": market_u,
         "symbol": symbol,
-        "name": name,
+        "timeframe": timeframe,
+        "name": requested[0],
         "from": from_.isoformat() if from_ else None,
         "to": to.isoformat() if to else None,
         "count": len(series),
         "available_names": available,
         "series": series,
     }
+
+
+@app.get("/screener/top50")
+def screener_top50(
+    market: str = Query(..., description="HK or US"),
+    on: Optional[date] = Query(None, alias="date", description="Session; default latest"),
+    _: None = Depends(_check_key),
+):
+    """Top-50 turnover pool for one market, plus the spike flag for each name."""
+    market_u = market.strip().upper()
+    if market_u not in {"US", "HK"}:
+        raise HTTPException(400, "market must be HK or US")
+    with session() as con:
+        try:
+            return build_top50(con, market_u, on)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+
+@app.get("/strategies")
+def strategies_list(owner: str = Depends(require_owner)):
+    with session() as con:
+        rows = list_strategies(con, owner)
+    return {"owner_email": owner, "count": len(rows), "strategies": rows}
+
+
+@app.post("/strategies")
+def strategies_create(body: StrategyBody, owner: str = Depends(require_owner)):
+    with session() as con:
+        try:
+            created = create_strategy(con, owner, body.model_dump())
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+    return created
+
+
+@app.get("/strategies/{strategy_id}")
+def strategies_get(strategy_id: str, owner: str = Depends(require_owner)):
+    with session() as con:
+        row = get_strategy(con, owner, strategy_id)
+    if row is None:
+        raise HTTPException(404, "Strategy not found")
+    return row
+
+
+@app.put("/strategies/{strategy_id}")
+def strategies_update(
+    strategy_id: str, body: StrategyBody, owner: str = Depends(require_owner)
+):
+    with session() as con:
+        try:
+            row = update_strategy(con, owner, strategy_id, body.model_dump())
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+    if row is None:
+        raise HTTPException(404, "Strategy not found")
+    return row
+
+
+@app.delete("/strategies/{strategy_id}")
+def strategies_delete(strategy_id: str, owner: str = Depends(require_owner)):
+    with session() as con:
+        ok = delete_strategy(con, owner, strategy_id)
+    if not ok:
+        raise HTTPException(404, "Strategy not found")
+    return Response(status_code=204)
+
+
+@app.post("/strategies/{strategy_id}/backtest")
+def strategies_backtest(
+    strategy_id: str, body: BacktestBody, owner: str = Depends(require_owner)
+):
+    """Run a dated backtest. Costs default to the PRD schedule when omitted."""
+    if body.start > body.end:
+        raise HTTPException(400, "start must be on or before end")
+    with session() as con:
+        strat = get_strategy(con, owner, strategy_id)
+        if strat is None:
+            raise HTTPException(404, "Strategy not found")
+        try:
+            return run_backtest(con, strat, body.start, body.end, body.costs)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
 
 
 @app.get("/")

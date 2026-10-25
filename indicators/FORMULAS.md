@@ -25,8 +25,10 @@ Warm-up: values are omitted (not written) until `min_periods` is satisfied.
 \]
 
 - Implementation: `pandas.Series.rolling(window=n, min_periods=n).mean()`
-- Default names: `MA_20`, `MA_50`, `MA_200`
+- Default names: `MA_5`, `MA_9`, `MA_20`, `MA_30`, `MA_50`, `MA_100`, `MA_200`, `MA_250`
+- Strategy fixed menu (conditions only): **5, 9, 20, 30, 50, 100, 250**. `MA_200` stays on the chart but is not a strategy window.
 - First valid point: the \(n\)-th available close
+- **Timeframe:** the same formula runs on daily, weekly, or monthly closes. Weekly/monthly rows are stored as `W|MA_n` / `M|MA_n` so they do not collide with the daily cache. The API still returns the logical name `MA_n` plus `timeframe`. First request computes and writes `indicator_cache` + `indicator_meta`; a later request reuses the rows while the bar fingerprint (count, last date, close sum, last close) is unchanged.
 
 ---
 
