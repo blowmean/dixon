@@ -19,7 +19,6 @@ from typing import Any, Literal, Optional
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, RedirectResponse, Response, StreamingResponse
-from fastapi.staticfiles import StaticFiles
 
 from pydantic import BaseModel, Field
 
@@ -40,6 +39,7 @@ from dixon.strategies import (
     list_strategies,
     update_strategy,
 )
+from dixon.ui_static import UiStaticFiles
 from dixon.yahoo import infer_market
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -572,8 +572,9 @@ def root_redirect():
 
 
 if STATIC_DIR.is_dir():
-    # html=True serves index.html for /ui/ ; assets at /ui/styles.css etc.
-    app.mount("/ui", StaticFiles(directory=str(STATIC_DIR), html=True), name="ui")
+    # Rewrites index.html so app.js/styles.css are content-hashed, and sets
+    # Cache-Control so the shell and those assets cannot be cached apart.
+    app.mount("/ui", UiStaticFiles(directory=STATIC_DIR), name="ui")
 
 
 def main() -> None:
