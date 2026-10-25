@@ -6,9 +6,14 @@
   const MAX_RESULTS = 50;
 
   const IND_COLORS = {
+    MA_5: "#f8fafc",
+    MA_9: "#fb7185",
     MA_20: "#f59e0b",
+    MA_30: "#facc15",
     MA_50: "#3b82f6",
-    MA_200: "#a855f7",
+    MA_100: "#34d399",
+    MA_200: "#a78bfa",
+    MA_250: "#a855f7",
     EMA_12: "#22d3ee",
     EMA_26: "#e879f9",
     BB_MID_20_2: "#94a3b8",
@@ -37,7 +42,20 @@
     filtered: [],
     activeIndex: -1,
     listOpen: false,
+    equityChart: null,
+    strategies: [],
+    editingId: null,
   };
+
+  const MA_MENU = [5, 9, 20, 30, 50, 100, 250];
+  const COND_TYPES = [
+    ["price_gt_ma", "Price > MA"],
+    ["price_lt_ma", "Price < MA"],
+    ["ma_slope_gt_0", "MA slope > 0"],
+    ["ma_slope_lt_0", "MA slope < 0"],
+    ["ma_stack", "MA stack"],
+    ["top50_spike", "In Top-50 spike"],
+  ];
 
   function $(id) {
     return document.getElementById(id);
@@ -133,12 +151,15 @@
       wickUpColor: "#26a69a",
       wickDownColor: "#ef5350",
     });
+    state.priceChart.priceScale("right").applyOptions({
+      scaleMargins: { top: 0.08, bottom: 0.25 },
+    });
     state.volumeSeries = state.priceChart.addHistogramSeries({
       priceFormat: { type: "volume" },
       priceScaleId: "vol",
     });
     state.priceChart.priceScale("vol").applyOptions({
-      scaleMargins: { top: 0.8, bottom: 0 },
+      scaleMargins: { top: 0.75, bottom: 0 },
     });
 
     state.rsiChart = LightweightCharts.createChart(rsiEl, chartOpts(rsiEl.clientHeight || 140));
@@ -235,11 +256,46 @@
     return el ? el.checked : true;
   }
 
-  async function fetchIndicator(symbol, name, from, to) {
-    const q = new URLSearchParams({ symbol, name });
+  async function fetchIndicators(symbol, names, from, to, timeframe) {
+    const q = new URLSearchParams({
+      symbol,
+      names: names.join(","),
+      timeframe: timeframe || "daily",
+    });
     if (from) q.set("from", from);
     if (to) q.set("to", to);
     return apiGet(`/indicators?${q}`);
+  }
+
+  async function apiSend(method, path, body) {
+    const res = await fetch(path, {
+      method,
+      headers: { ...apiHeaders(), "Content-Type": "application/json" },
+      body: body == null ? undefined : JSON.stringify(body),
+    });
+    if (res.status === 204) return null;
+    const text = await res.text();
+    let payload = null;
+    try {
+      payload = text ? JSON.parse(text) : null;
+    } catch (_) {
+      payload = null;
+    }
+    if (!res.ok) {
+      const detail = payload && payload.detail ? payload.detail : text.slice(0, 200);
+      throw new Error(`${res.status} ${path}: ${detail}`);
+    }
+    return payload;
+  }
+
+  function esc(value) {
+    return String(value == null ? "" : value).replace(/[&<>"']/g, (ch) => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;",
+    }[ch]));
   }
 
   /* ---------- Searchable symbol picker ---------- */
@@ -500,13 +556,6 @@
       state.volumeSeries.setData(volData);
       state.barDates = new Set(bars.map((b) => b.date));
 
-      let indFrom = from;
-      let indTo = to;
-      if (timeframe !== "daily" && bars.length) {
-        indFrom = bars[0].period_start || bars[0].date;
-        indTo = bars[bars.length - 1].date;
-      }
-
       clearPriceOverlays();
       const indNames = selectedIndicators();
       const showRsi = paneEnabled("rsi");
@@ -520,13 +569,13 @@
         toFetch.push("MACD_12_26_9", "MACD_SIGNAL_12_26_9", "MACD_HIST_12_26_9");
       }
 
-      const results = await Promise.all(
-        toFetch.map((n) => fetchIndicator(symbol, n, indFrom, indTo).then((r) => [n, r]))
-      );
-      const byName = Object.fromEntries(results);
+      const fetched = toFetch.length
+        ? await fetchIndicators(symbol, toFetch, from, to, timeframe)
+        : { series: {} };
+      const byName = fetched.series || {};
 
       indNames.forEach((n) => {
-        const aligned = alignSeries(byName[n]?.series, state.barDates);
+        const aligned = alignSeries(byName[n], state.barDates);
         if (n.startsWith("BB_")) {
           addLine(n, aligned, IND_COLORS[n], {
             lineStyle: n === "BB_MID_20_2" ? 0 : 2,
@@ -538,15 +587,15 @@
       });
 
       if (showRsi) {
-        state.rsiSeries.setData(alignSeries(byName.RSI_14?.series, state.barDates));
+        state.rsiSeries.setData(alignSeries(byName.RSI_14, state.barDates));
       } else {
         state.rsiSeries.setData([]);
       }
 
       if (showMacd) {
-        const macd = alignSeries(byName.MACD_12_26_9?.series, state.barDates);
-        const sig = alignSeries(byName.MACD_SIGNAL_12_26_9?.series, state.barDates);
-        const histRaw = alignSeries(byName.MACD_HIST_12_26_9?.series, state.barDates);
+        const macd = alignSeries(byName.MACD_12_26_9, state.barDates);
+        const sig = alignSeries(byName.MACD_SIGNAL_12_26_9, state.barDates);
+        const histRaw = alignSeries(byName.MACD_HIST_12_26_9, state.barDates);
         state.macdLine.setData(macd);
         state.macdSignal.setData(sig);
         state.macdHist.setData(
@@ -566,17 +615,414 @@
       if (showMacd) state.macdChart.timeScale().fitContent();
       resizeCharts();
 
-      const note =
-        timeframe === "daily"
-          ? ""
-          : " · overlays = daily cache aligned to period_end";
       setStatus(
-        `${symbol} ${timeframe}: ${bars.length} bars · ${indNames.length} price overlays${note}`
+        `${symbol} ${timeframe}: ${bars.length} bars · ${indNames.length} price overlays`
       );
     } catch (err) {
       console.error(err);
       setStatus(String(err.message || err), "error");
     }
+  }
+
+  /* ---------- Top-50 + strategies ---------- */
+
+  function setHint(id, msg, kind) {
+    const el = $(id);
+    if (!el) return;
+    el.textContent = msg || "";
+    el.className = "hint" + (kind ? " " + kind : "");
+  }
+
+  function fmtNum(value, digits) {
+    if (value == null || Number.isNaN(Number(value))) return "—";
+    return Number(value).toLocaleString(undefined, { maximumFractionDigits: digits });
+  }
+
+  function fmtPct(value) {
+    if (value == null || Number.isNaN(Number(value))) return "—";
+    return (Number(value) * 100).toFixed(2) + "%";
+  }
+
+  async function loadScreener() {
+    const market = $("scrMarket").value;
+    const day = $("scrDate").value;
+    const q = new URLSearchParams({ market });
+    if (day) q.set("date", day);
+    setHint("scrStatus", "Loading…");
+    try {
+      const data = await apiGet(`/screener/top50?${q}`);
+      if (data.date && !$("scrDate").value) $("scrDate").value = data.date;
+      const body = $("scrTable").querySelector("tbody");
+      body.innerHTML = "";
+      (data.rows || []).forEach((row) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML =
+          `<td>${row.rank}</td>` +
+          `<td>${esc(row.symbol)}</td>` +
+          `<td>${fmtNum(row.close, 4)}</td>` +
+          `<td>${fmtNum(row.turnover, 0)}</td>` +
+          `<td>${fmtPct(row.day_gain)}</td>` +
+          `<td class="${row.spike ? "spike-yes" : "spike-no"}">${row.spike ? "spike" : ""}</td>`;
+        tr.addEventListener("click", () => {
+          const item =
+            state.allSymbols.find((s) => s.symbol === row.symbol) ||
+            { symbol: row.symbol, market: data.market };
+          pickSymbol(item);
+        });
+        body.appendChild(tr);
+      });
+      setHint(
+        "scrStatus",
+        `${data.date || "—"} · ${data.count || 0} names · ${data.spike_count || 0} spikes`
+      );
+    } catch (err) {
+      setHint("scrStatus", String(err.message || err), "error");
+    }
+  }
+
+  function emptyRules() {
+    return {
+      long: { logic: "AND", conditions: [{ type: "price_gt_ma", window: 20 }] },
+      flat: { logic: "OR", conditions: [{ type: "price_lt_ma", window: 20 }] },
+      short: { logic: "AND", conditions: [] },
+    };
+  }
+
+  function conditionNeedsWindow(type) {
+    return type === "price_gt_ma" || type === "price_lt_ma" || type === "ma_slope_gt_0" || type === "ma_slope_lt_0";
+  }
+
+  function formatStack(cond) {
+    const op = (cond.direction || "up") === "down" ? "<" : ">";
+    return (cond.windows || []).join(op);
+  }
+
+  function parseStack(text) {
+    const raw = String(text || "").replace(/\s+/g, "");
+    if (!raw) throw new Error("MA stack is empty");
+    const parts = raw.split(/(>|<)/);
+    if (parts.length < 3) throw new Error("Stack needs at least two MAs, e.g. 5>20>50");
+    let direction = null;
+    const windows = [];
+    for (let i = 0; i < parts.length; i++) {
+      if (i % 2 === 0) {
+        const n = Number(parts[i]);
+        if (!MA_MENU.includes(n)) throw new Error(`MA ${parts[i]} is not in the fixed menu`);
+        windows.push(n);
+      } else {
+        const dir = parts[i] === ">" ? "up" : "down";
+        if (direction && direction !== dir) throw new Error("Use only > or only < in a stack");
+        direction = dir;
+      }
+    }
+    return { windows, direction: direction || "up" };
+  }
+
+  function renderRules(rules) {
+    const root = $("rulesEditor");
+    root.innerHTML = "";
+    ["long", "flat", "short"].forEach((side) => {
+      const group = (rules && rules[side]) || { logic: "AND", conditions: [] };
+      const box = document.createElement("div");
+      box.className = "rules-side";
+      const title = document.createElement("h3");
+      title.innerHTML =
+        `<span>${side}</span>` +
+        `<select data-logic="${side}">` +
+        `<option value="AND"${group.logic === "AND" ? " selected" : ""}>AND</option>` +
+        `<option value="OR"${group.logic === "OR" ? " selected" : ""}>OR</option>` +
+        `</select>` +
+        `<button type="button" class="secondary" data-add="${side}">Add condition</button>`;
+      box.appendChild(title);
+      (group.conditions || []).forEach((cond) => {
+        const row = document.createElement("div");
+        row.className = "cond";
+        row.dataset.side = side;
+        const typeOpts = COND_TYPES.map(
+          ([id, label]) => `<option value="${id}"${cond.type === id ? " selected" : ""}>${label}</option>`
+        ).join("");
+        const winOpts = MA_MENU.map(
+          (w) => `<option value="${w}"${Number(cond.window) === w ? " selected" : ""}>${w}</option>`
+        ).join("");
+        row.innerHTML =
+          `<select class="cond-type">${typeOpts}</select>` +
+          `<select class="cond-window">${winOpts}</select>` +
+          `<input class="cond-stack" type="text" placeholder="5>20>50" value="${esc(cond.type === "ma_stack" ? formatStack(cond) : "")}" />` +
+          `<button type="button" class="secondary cond-del">Remove</button>`;
+        box.appendChild(row);
+        syncCondRow(row);
+      });
+      root.appendChild(box);
+    });
+  }
+
+  function syncCondRow(row) {
+    const type = row.querySelector(".cond-type").value;
+    row.querySelector(".cond-window").hidden = !conditionNeedsWindow(type);
+    row.querySelector(".cond-stack").hidden = type !== "ma_stack";
+  }
+
+  function readRulesFromDom() {
+    const rules = {};
+    ["long", "flat", "short"].forEach((side) => {
+      const logic = document.querySelector(`[data-logic="${side}"]`).value;
+      const conditions = [];
+      document.querySelectorAll(`.cond[data-side="${side}"]`).forEach((row) => {
+        const type = row.querySelector(".cond-type").value;
+        if (type === "top50_spike") {
+          conditions.push({ type });
+        } else if (type === "ma_stack") {
+          const parsed = parseStack(row.querySelector(".cond-stack").value);
+          conditions.push({ type, windows: parsed.windows, direction: parsed.direction });
+        } else {
+          conditions.push({ type, window: Number(row.querySelector(".cond-window").value) });
+        }
+      });
+      rules[side] = { logic, conditions };
+    });
+    return rules;
+  }
+
+  function renderStrategyList() {
+    const ul = $("strategyList");
+    ul.innerHTML = "";
+    if (!state.strategies.length) {
+      const li = document.createElement("li");
+      li.textContent = "No strategies yet";
+      ul.appendChild(li);
+      return;
+    }
+    state.strategies.forEach((st) => {
+      const li = document.createElement("li");
+      if (st.id === state.editingId) li.className = "active";
+      li.innerHTML = `<div>${esc(st.name)}</div><div class="sym">${esc(st.symbol)} · ${esc(st.timeframe)}</div>`;
+      li.addEventListener("click", () => loadStrategyIntoForm(st));
+      ul.appendChild(li);
+    });
+  }
+
+  function loadStrategyIntoForm(st) {
+    state.editingId = st.id;
+    $("stName").value = st.name;
+    $("stSymbol").value = st.symbol;
+    $("stTimeframe").value = st.timeframe;
+    renderRules(st.rules);
+    renderStrategyList();
+    setHint("stStatus", `Editing ${st.name}`);
+  }
+
+  function resetStrategyForm() {
+    state.editingId = null;
+    $("stName").value = "";
+    $("stSymbol").value = $("symbol").value || "";
+    $("stTimeframe").value = $("timeframe").value || "daily";
+    renderRules(emptyRules());
+    renderStrategyList();
+    setHint("stStatus", "New strategy");
+  }
+
+  async function reloadStrategies() {
+    const data = await apiGet("/strategies");
+    state.strategies = data.strategies || [];
+    renderStrategyList();
+    return data;
+  }
+
+  function readCostOverrides() {
+    const map = [
+      ["cHkBps", "hk_commission_bps"],
+      ["cHkTicks", "hk_spread_ticks"],
+      ["cUsShare", "us_commission_per_share"],
+      ["cUsMin", "us_commission_min"],
+      ["cUsBps", "us_spread_bps"],
+      ["cFrac", "equity_fraction"],
+    ];
+    const costs = {};
+    map.forEach(([id, key]) => {
+      const raw = $(id).value.trim();
+      if (raw !== "") costs[key] = Number(raw);
+    });
+    return costs;
+  }
+
+  function renderBacktest(result) {
+    const m = result.metrics || {};
+    const bits = [
+      ["Ending equity", `${fmtNum(m.ending_equity, 2)} ${result.currency || ""}`],
+      ["Total P&L", fmtNum(m.total_pnl, 2)],
+      ["Return", fmtPct(m.total_return)],
+      ["Trades", String(m.trade_count ?? 0)],
+      ["Win rate", m.win_rate == null ? "—" : `${fmtPct(m.win_rate)} (target > 50%)`],
+      ["Max DD", `${fmtPct(m.max_drawdown)} (target ≤ 10%)`],
+    ];
+    $("btMetrics").innerHTML = bits
+      .map((pair) => `<div class="metric"><span class="k">${esc(pair[0])}</span><span class="v">${esc(pair[1])}</span></div>`)
+      .join("");
+    const body = $("btTrades").querySelector("tbody");
+    body.innerHTML = "";
+    (result.trades || []).forEach((t) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML =
+        `<td>${esc(t.side)}</td>` +
+        `<td>${esc(t.entry_date)}</td>` +
+        `<td>${esc(t.exit_date)}</td>` +
+        `<td>${fmtNum(t.shares, 4)}</td>` +
+        `<td>${fmtNum(t.entry_price, 4)}</td>` +
+        `<td>${fmtNum(t.exit_price, 4)}</td>` +
+        `<td>${fmtNum(t.pnl, 2)}</td>`;
+      body.appendChild(tr);
+    });
+    if (result.open_position) {
+      const op = result.open_position;
+      const tr = document.createElement("tr");
+      tr.innerHTML =
+        `<td>${esc(op.side)} open</td>` +
+        `<td>${esc(op.entry_date)}</td>` +
+        `<td>mark ${fmtNum(op.mark, 4)}</td>` +
+        `<td>${fmtNum(op.shares, 4)}</td>` +
+        `<td>${fmtNum(op.entry_price, 4)}</td>` +
+        `<td></td>` +
+        `<td>${fmtNum(op.unrealized_pnl, 2)}</td>`;
+      body.appendChild(tr);
+    }
+    drawEquity(result.equity_curve || []);
+  }
+
+  function drawEquity(curve) {
+    const el = $("equity-chart");
+    if (state.equityChart) {
+      state.equityChart.remove();
+      state.equityChart = null;
+    }
+    if (!curve.length || typeof LightweightCharts === "undefined") return;
+    const chart = LightweightCharts.createChart(el, {
+      ...chartOpts(el.clientHeight || 180),
+      height: 180,
+      width: el.clientWidth || 640,
+    });
+    const series = chart.addLineSeries({ color: "#3b82f6", lineWidth: 2, priceLineVisible: false });
+    series.setData(curve.map((pt) => ({ time: businessDay(pt.date), value: pt.equity })));
+    chart.timeScale().fitContent();
+    state.equityChart = chart;
+  }
+
+  function wireResearch() {
+    document.querySelectorAll(".research-tabs .tab").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".research-tabs .tab").forEach((b) => b.classList.remove("active"));
+        btn.classList.add("active");
+        const which = btn.getAttribute("data-tab");
+        $("tab-screener").hidden = which !== "screener";
+        $("tab-strategy").hidden = which !== "strategy";
+        if (which === "strategy" && state.equityChart) {
+          state.equityChart.applyOptions({ width: $("equity-chart").clientWidth });
+        }
+      });
+    });
+    $("btnScreener").addEventListener("click", loadScreener);
+    $("rulesEditor").addEventListener("change", (e) => {
+      const row = e.target.closest(".cond");
+      if (row && e.target.classList.contains("cond-type")) syncCondRow(row);
+    });
+    $("rulesEditor").addEventListener("click", (e) => {
+      const add = e.target.getAttribute && e.target.getAttribute("data-add");
+      if (add) {
+        let rules;
+        try {
+          rules = readRulesFromDom();
+        } catch (err) {
+          setHint("stStatus", String(err.message || err), "error");
+          return;
+        }
+        rules[add].conditions.push({ type: "price_gt_ma", window: 20 });
+        renderRules(rules);
+        return;
+      }
+      if (e.target.classList.contains("cond-del")) {
+        const row = e.target.closest(".cond");
+        const side = row.dataset.side;
+        const rules = readRulesFromDom();
+        const rows = Array.from(document.querySelectorAll(`.cond[data-side="${side}"]`));
+        const idx = rows.indexOf(row);
+        if (idx >= 0) rules[side].conditions.splice(idx, 1);
+        renderRules(rules);
+      }
+    });
+    $("btnNewStrategy").addEventListener("click", resetStrategyForm);
+    $("btnReloadStrategies").addEventListener("click", () => {
+      reloadStrategies().catch((err) => setHint("stStatus", String(err.message || err), "error"));
+    });
+    $("btnUseChartSymbol").addEventListener("click", () => {
+      $("stSymbol").value = $("symbol").value || "";
+      $("stTimeframe").value = $("timeframe").value || "daily";
+    });
+    $("strategyForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      let rules;
+      try {
+        rules = readRulesFromDom();
+      } catch (err) {
+        setHint("stStatus", String(err.message || err), "error");
+        return;
+      }
+      const payload = {
+        name: $("stName").value.trim(),
+        symbol: $("stSymbol").value.trim(),
+        timeframe: $("stTimeframe").value,
+        rules,
+      };
+      try {
+        const saved = state.editingId
+          ? await apiSend("PUT", `/strategies/${state.editingId}`, payload)
+          : await apiSend("POST", "/strategies", payload);
+        state.editingId = saved.id;
+        await reloadStrategies();
+        loadStrategyIntoForm(saved);
+        setHint("stStatus", "Saved");
+      } catch (err) {
+        setHint("stStatus", String(err.message || err), "error");
+      }
+    });
+    $("btnDeleteStrategy").addEventListener("click", async () => {
+      if (!state.editingId) return;
+      if (!window.confirm("Delete this strategy?")) return;
+      try {
+        await apiSend("DELETE", `/strategies/${state.editingId}`);
+        resetStrategyForm();
+        await reloadStrategies();
+        setHint("stStatus", "Deleted");
+      } catch (err) {
+        setHint("stStatus", String(err.message || err), "error");
+      }
+    });
+    $("btnBacktest").addEventListener("click", async () => {
+      if (!state.editingId) {
+        setHint("stStatus", "Save the strategy before running a backtest", "error");
+        return;
+      }
+      const start = $("btStart").value;
+      const end = $("btEnd").value;
+      if (!start || !end) {
+        setHint("stStatus", "Pick a start and end date", "error");
+        return;
+      }
+      const body = { start, end };
+      const costs = readCostOverrides();
+      if (Object.keys(costs).length) body.costs = costs;
+      setHint("stStatus", "Running backtest…");
+      try {
+        const result = await apiSend("POST", `/strategies/${state.editingId}/backtest`, body);
+        renderBacktest(result);
+        const m = result.metrics;
+        setHint(
+          "stStatus",
+          `${m.trade_count} trades · P&L ${fmtNum(m.total_pnl, 2)} ${result.currency}`
+        );
+      } catch (err) {
+        setHint("stStatus", String(err.message || err), "error");
+      }
+    });
+    renderRules(emptyRules());
   }
 
   function wire() {
@@ -591,6 +1037,7 @@
     document.querySelectorAll(".overlays input").forEach((cb) => {
       cb.addEventListener("change", loadChart);
     });
+    wireResearch();
     const saved = localStorage.getItem("dixon_api_key");
     if (saved) $("apiKey").value = saved;
   }
@@ -600,6 +1047,12 @@
     ensureCharts();
     await loadSymbols();
     await loadChart();
+    try {
+      await reloadStrategies();
+    } catch (_) {
+      /* strategies stay empty until the API is reachable */
+    }
+    loadScreener();
   }
 
   if (document.readyState === "loading") {

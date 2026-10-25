@@ -109,5 +109,38 @@ CREATE INDEX IF NOT EXISTS idx_monthly_bars_symbol
 CREATE INDEX IF NOT EXISTS idx_indicator_symbol_name
   ON indicator_cache (market, symbol, name);
 
+-- v1.2: fingerprint so on-demand MA/indicator cache can be reused until bars change.
+-- `name` is the logical series (MA_20, RSI_14, …). Weekly/monthly rows in
+-- indicator_cache use a timeframe prefix on `name` (see dixon/compute_indicators.py);
+-- this table records which bar set that series was computed from.
+CREATE TABLE IF NOT EXISTS indicator_meta (
+  market       VARCHAR NOT NULL,
+  symbol       VARCHAR NOT NULL,
+  timeframe    VARCHAR NOT NULL,          -- daily | weekly | monthly
+  name         VARCHAR NOT NULL,          -- logical name, no storage prefix
+  fingerprint  VARCHAR NOT NULL,
+  updated_at   TIMESTAMP DEFAULT current_timestamp,
+  PRIMARY KEY (market, symbol, timeframe, name),
+  CHECK (timeframe IN ('daily', 'weekly', 'monthly'))
+);
+
+-- v1.2: owner-private strategies (one symbol). rules_json is the fixed-menu rule tree.
+CREATE TABLE IF NOT EXISTS strategies (
+  id           VARCHAR PRIMARY KEY,
+  owner_email  VARCHAR NOT NULL,
+  name         VARCHAR NOT NULL,
+  symbol       VARCHAR NOT NULL,
+  market       VARCHAR NOT NULL,
+  timeframe    VARCHAR NOT NULL DEFAULT 'daily',
+  rules_json   VARCHAR NOT NULL,
+  created_at   TIMESTAMP DEFAULT current_timestamp,
+  updated_at   TIMESTAMP DEFAULT current_timestamp,
+  CHECK (market IN ('US', 'HK')),
+  CHECK (timeframe IN ('daily', 'weekly', 'monthly'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_strategies_owner
+  ON strategies (owner_email);
+
 -- Optional Hive Parquet lake (written by ingest/rollup):
 --   data/parquet/market={US|HK}/timeframe={daily|weekly|monthly}/year=YYYY/*.parquet

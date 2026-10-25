@@ -3,11 +3,18 @@
 from __future__ import annotations
 
 import argparse
+import threading
+from contextlib import contextmanager
 from pathlib import Path
+from typing import Iterator
 
 import duckdb
 
 from dixon.config import DB_PATH, SCHEMA_SQL, DATA_DIR
+
+# One writer at a time. FastAPI runs sync endpoints on a threadpool, and DuckDB
+# rejects overlapping writers on the same file.
+_DB_LOCK = threading.Lock()
 
 
 def connect(db_path: Path | None = None, apply_schema: bool = True) -> duckdb.DuckDBPyConnection:
@@ -18,6 +25,17 @@ def connect(db_path: Path | None = None, apply_schema: bool = True) -> duckdb.Du
         sql = SCHEMA_SQL.read_text()
         con.execute(sql)
     return con
+
+
+@contextmanager
+def session(db_path: Path | None = None) -> Iterator[duckdb.DuckDBPyConnection]:
+    """API-facing connection. Holds the process lock until the caller finishes."""
+    with _DB_LOCK:
+        con = connect(db_path)
+        try:
+            yield con
+        finally:
+            con.close()
 
 
 def apply_schema_cli() -> None:

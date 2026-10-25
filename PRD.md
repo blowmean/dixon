@@ -2,7 +2,8 @@
 
 Approved in Project Dixon group chat · 2026-10-23 (HKT)  
 **v1.1 amendment** · 2026-10-24 (HKT): public HTTPS exposure via Cloudflare on `robonet.cc`  
-**Go-live** · 2026-10-24 (HKT): `https://dixon.robonet.cc/ui/` via Tunnel `dixon-mac11` → mac11 `:8765`; `DIXON_API_KEY` / `X-API-Key` enabled
+**Go-live** · 2026-10-24 (HKT): `https://dixon.robonet.cc/ui/` via Tunnel → origin `:8765`; Access + `DIXON_API_KEY`  
+**v1.2 amendment** · 2026-10-25 (HKT): volume histogram, Top-50 screener, fixed-menu MAs, owner-only strategy backtest. Endpoint notes are in [README](README.md) and below. The sealed chat PRD is the product source of truth; this file records what the repo implements.
 
 ## Status
 
@@ -106,6 +107,27 @@ Checks:
 - HK vs US session calendars — job must respect both closes
 - Local Mac downtime — daily job may skip; public site down when Mac/Tunnel off
 - Public exposure of Yahoo-derived data — auth required; watch Cloudflare/Yahoo ToS and redistributability
+
+## v1.2 implementation notes
+
+Shipped in this repo (research / backtest only):
+
+| Piece | Where |
+| --- | --- |
+| Volume histogram under candles, bottom ~25% of the price pane | `dixon/static/app.js` (`priceScale("right")` bottom 0.25, volume scale top 0.75) |
+| Top-50 HK and US pools + spike flags | `GET /screener/top50?market=HK\|US&date=YYYY-MM-DD` |
+| SMA menu 5, 9, 20, 30, 50, 100, 250 on D/W/M, on-demand DuckDB cache | `GET /indicators` (`name` or `names`, `timeframe`) |
+| Owner-private strategy CRUD, one symbol | `GET/POST /strategies`, `GET/PUT/DELETE /strategies/{id}` |
+| Next-open backtest, 20% equity, synthetic shorts, dated P&L | `POST /strategies/{id}/backtest` |
+| Golden P&L lock | `python scripts/golden_backtest.py` |
+
+Spike rule (inside that market's Top-50 only): close > prior 5-session high AND day gain ≥ 5% AND SMA30 rising. Turnover is close × volume in local currency.
+
+Owner: Access JWT `email` claim when `Cf-Access-Jwt-Assertion` is present; otherwise `DIXON_DEFAULT_OWNER` (default `paul.kf.leung@gmail.com`) for localhost and `X-API-Key`.
+
+Cost defaults when the backtest body leaves them blank: HK commission 25 bps and a 2-tick HKEX spread (half charged each side); US 5 bps each side and $0.005/share with a $1 minimum. Capital HKD 500,000 / USD 100,000. Win rate target > 50% and max drawdown target 10% are returned on `metrics` and are not pass/fail gates.
+
+Out of this ship: broker routing, alerts, shared strategies, fundamentals, sector, 60%-off-low, 5/10 MA stop, a second vendor.
 
 ## Next steps
 
