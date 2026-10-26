@@ -18,15 +18,24 @@ Accounting:
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from datetime import date
 from typing import Any
 
 import duckdb
 
-from dixon.compute_indicators import ensure_indicators, indicator_map, load_ohlc
+from dixon.compute_indicators import (
+    ensure_indicators,
+    indicator_map,
+    load_ohlc,
+    prior_high,
+    prior_low,
+    series_by_date,
+    volume_sma,
+)
 from dixon.costs import CostModel, commission, cost_model_from_overrides, slip_per_share
-from dixon.rules import target_side, validate_rules, windows_used
+from dixon.rules import SignalView, signal_requirements, target_side, validate_rules, windows_used
 from dixon.screener import spike_dates, to_date
 
 MAX_CONCURRENT = 5
@@ -193,6 +202,18 @@ def _round_money(value: float | None, digits: int = 6) -> float | None:
     return round(float(value), digits)
 
 
+def _bar_float(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if math.isnan(number):
+        return None
+    return number
+
+
 def _max_drawdown(equities: list[float]) -> float:
     if not equities:
         return 0.0
@@ -223,10 +244,17 @@ def run_backtest(
     capital = costs.capital_for(market)
 
     windows = windows_used(rules)
-    if windows:
-        ensure_indicators(con, market, symbol, timeframe, [f"MA_{w}" for w in windows])
+    reqs = signal_requirements(rules)
+    indicator_names = [f"MA_{w}" for w in windows]
+    indicator_names.extend(f"RSI_{period}" for period in reqs["rsi_periods"])
+    if indicator_names:
+        ensure_indicators(con, market, symbol, timeframe, indicator_names)
     ma_maps = {
         w: indicator_map(con, market, symbol, timeframe, f"MA_{w}") for w in windows
+    }
+    rsi_maps = {
+        period: indicator_map(con, market, symbol, timeframe, f"RSI_{period}")
+        for period in reqs["rsi_periods"]
     }
 
     bars = load_ohlc(con, symbol=symbol, market=market, timeframe=timeframe)
@@ -235,12 +263,21 @@ def run_backtest(
     else:
         in_range = bars
 
+    vol_maps = {
+        w: series_by_date(bars["bar_date"], volume_sma(bars["volume"], w))
+        for w in reqs["volume_windows"]
+    } if not bars.empty else {}
+    high_maps = {
+        w: series_by_date(bars["bar_date"], prior_high(bars["high"], w))
+        for w in reqs["donchian_high_windows"]
+    } if not bars.empty else {}
+    low_maps = {
+        w: series_by_date(bars["bar_date"], prior_low(bars["low"], w))
+        for w in reqs["donchian_low_windows"]
+    } if not bars.empty else {}
+
     spikes: set[date] = set()
-    if any(
-        c["type"] == "top50_spike"
-        for side in ("long", "flat", "short")
-        for c in rules[side]["conditions"]
-    ):
+    if reqs["needs_spike"]:
         spikes = spike_dates(con, market, symbol, start, end)
 
     book = Portfolio(cash=capital, costs=costs, market=market)
@@ -286,10 +323,21 @@ def run_backtest(
         if i + 1 < len(records):
             pending = target_side(
                 rules,
-                close_px,
-                mas,
-                mas_prev,
-                bar_date in spikes,
+                SignalView(
+                    close=close_px,
+                    mas=mas,
+                    mas_prev=mas_prev,
+                    spike=bar_date in spikes,
+                    volume=_bar_float(rec.get("volume")),
+                    vol_sma={w: vol_maps[w].get(bar_date) for w in reqs["volume_windows"]},
+                    rsi={p: rsi_maps[p].get(bar_date) for p in reqs["rsi_periods"]},
+                    prior_high={
+                        w: high_maps[w].get(bar_date) for w in reqs["donchian_high_windows"]
+                    },
+                    prior_low={
+                        w: low_maps[w].get(bar_date) for w in reqs["donchian_low_windows"]
+                    },
+                ),
                 book.side_of(symbol),
             )
         else:

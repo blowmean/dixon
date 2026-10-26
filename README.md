@@ -239,8 +239,16 @@ One symbol per strategy. `timeframe` is `daily`, `weekly`, or `monthly`. Each of
 | `ma_slope_gt_0` / `ma_slope_lt_0` | `window` | SMA_t vs SMA_{t−1} |
 | `ma_stack` | `windows` (e.g. `[5,20,50]`), `direction` `up` or `down` | 5>20>50 or 5<20<50 |
 | `top50_spike` | — | this bar's session (weekly/monthly: `period_end`) is a daily Top-50 spike |
+| `rel_volume` | `k` (default **1.5**), `window` (default **20**) | signal-bar volume ≥ k × SMA(volume, N). The average **includes** the signal bar |
+| `rsi_lte` / `rsi_gte` | `period` (default **2**), `threshold` (default **5** / **70**) | Wilder RSI(period) ≤ or ≥ threshold. Same formula as `RSI_14`, period not fixed |
+| `donchian_high` | `window` (default **20**) | close > max `high` of the previous N bars (the signal bar is excluded) |
+| `donchian_low` | `window` (default **10**) | close < min `low` of the previous M bars (the signal bar is excluded) |
 
-Windows must be the fixed menu: 5, 9, 20, 30, 50, 100, 250. An empty side never fires. If long and short both fire, the target is flat; otherwise long, then short, then the flat rule, otherwise hold. The fill is the **next stored bar's open**.
+Price-SMA windows must be the fixed menu: 5, 9, 20, 30, 50, 100, 250. Relative-volume and Donchian lookbacks are any integer from 1 to 500; RSI period is 1 to 250 and the threshold is 0 to 100. Omitted knobs are stored as the defaults above. Lookbacks count **bars of the strategy timeframe** (a daily strategy's 20 is 20 sessions, not calendar days).
+
+An empty side never fires. If long and short both fire, the target is flat; otherwise long, then short, then the flat rule, otherwise hold. Put exits on `flat`: a flat rule does not override a long or short rule that is still true. The fill is the **next stored bar's open**.
+
+In `/ui/`, open **Strategies**. Each condition row has the extra knobs when the type needs them (k and N, RSI period and threshold, Donchian N or M). The three **Public patterns** buttons fill a volume-confirmed SMA(20) breakout, a Connors-style RSI(2) ≤ 5 entry that exits on close > SMA(5) or RSI(2) ≥ 70, and a Donchian 20/10 channel. Edit the numbers, Save, then run a dated backtest. ATR stops are not part of this slice.
 
 ```bash
 curl -s -X POST localhost:8765/strategies \

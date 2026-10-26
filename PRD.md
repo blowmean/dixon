@@ -129,6 +129,18 @@ Cost defaults when the backtest body leaves them blank: HK commission 25 bps and
 
 Out of this ship: broker routing, alerts, shared strategies, fundamentals, sector, 60%-off-low, 5/10 MA stop, a second vendor.
 
+### S1 signal predicates (one symbol)
+
+Strategy conditions, same CRUD and next-open backtest. Knobs live on each condition and in the Strategies panel (including three public-pattern fillers).
+
+| Predicate | Default | Rule |
+| --- | --- | --- |
+| `rel_volume` | k=1.5, N=20 | volume ≥ k × SMA(volume, N), average includes the signal bar |
+| `rsi_lte` / `rsi_gte` | period 2, threshold 5 / 70 | Wilder RSI(period) compared with the threshold |
+| `donchian_high` / `donchian_low` | N=20 / M=10 | close > prior N-bar high, or close < prior M-bar low |
+
+Not in this slice: Minervini RS rank, cross-sectional momentum, a shared multi-name book, ATR stops.
+
 ## Next steps
 
 1. Paul delivers Cloudflare credentials via **1:1 masked secret** or Cloudflare OAuth plugin (not group chat)

@@ -56,7 +56,19 @@
     ["ma_slope_lt_0", "MA slope < 0"],
     ["ma_stack", "MA stack"],
     ["top50_spike", "In Top-50 spike"],
+    ["rel_volume", "Rel volume ≥ k×SMA"],
+    ["rsi_lte", "RSI ≤ threshold"],
+    ["rsi_gte", "RSI ≥ threshold"],
+    ["donchian_high", "Close > prior N high"],
+    ["donchian_low", "Close < prior M low"],
   ];
+  const PREDICATE_DEFAULTS = {
+    rel_volume: { k: 1.5, window: 20 },
+    rsi_lte: { period: 2, threshold: 5 },
+    rsi_gte: { period: 2, threshold: 70 },
+    donchian_high: { window: 20 },
+    donchian_low: { window: 10 },
+  };
 
   function $(id) {
     return document.getElementById(id);
@@ -711,6 +723,14 @@
     return type === "price_gt_ma" || type === "price_lt_ma" || type === "ma_slope_gt_0" || type === "ma_slope_lt_0";
   }
 
+  function isRsiType(type) {
+    return type === "rsi_lte" || type === "rsi_gte";
+  }
+
+  function isDonchianType(type) {
+    return type === "donchian_high" || type === "donchian_low";
+  }
+
   function formatStack(cond) {
     const op = (cond.direction || "up") === "down" ? "<" : ">";
     return (cond.windows || []).join(op);
@@ -763,22 +783,58 @@
         const winOpts = MA_MENU.map(
           (w) => `<option value="${w}"${Number(cond.window) === w ? " selected" : ""}>${w}</option>`
         ).join("");
+        const lookback = isRsiType(cond.type) ? cond.period : (isDonchianType(cond.type) || cond.type === "rel_volume" ? cond.window : "");
         row.innerHTML =
           `<select class="cond-type">${typeOpts}</select>` +
           `<select class="cond-window">${winOpts}</select>` +
           `<input class="cond-stack" type="text" placeholder="5>20>50" value="${esc(cond.type === "ma_stack" ? formatStack(cond) : "")}" />` +
+          `<input class="cond-k" type="number" step="0.1" min="0.1" placeholder="k" title="Volume multiple k" value="${esc(cond.type === "rel_volume" ? cond.k : "")}" />` +
+          `<input class="cond-n" type="number" step="1" min="1" placeholder="N" title="Lookback N or RSI period" value="${esc(lookback == null ? "" : lookback)}" />` +
+          `<input class="cond-threshold" type="number" step="0.1" min="0" max="100" placeholder="threshold" title="RSI threshold" value="${esc(isRsiType(cond.type) ? cond.threshold : "")}" />` +
           `<button type="button" class="secondary cond-del">Remove</button>`;
         box.appendChild(row);
-        syncCondRow(row);
+        syncCondRow(row, false);
       });
       root.appendChild(box);
     });
   }
 
-  function syncCondRow(row) {
+  function syncCondRow(row, fillDefaults) {
     const type = row.querySelector(".cond-type").value;
+    const isRel = type === "rel_volume";
+    const isRsi = isRsiType(type);
+    const isDon = isDonchianType(type);
     row.querySelector(".cond-window").hidden = !conditionNeedsWindow(type);
     row.querySelector(".cond-stack").hidden = type !== "ma_stack";
+    row.querySelector(".cond-k").hidden = !isRel;
+    row.querySelector(".cond-n").hidden = !(isRel || isRsi || isDon);
+    row.querySelector(".cond-threshold").hidden = !isRsi;
+    const n = row.querySelector(".cond-n");
+    if (isRel) n.placeholder = "N";
+    else if (isRsi) n.placeholder = "period";
+    else if (type === "donchian_high") n.placeholder = "N";
+    else if (type === "donchian_low") n.placeholder = "M";
+    if (!fillDefaults) return;
+    const defaults = PREDICATE_DEFAULTS[type];
+    if (!defaults) return;
+    if (defaults.k != null) row.querySelector(".cond-k").value = defaults.k;
+    if (defaults.window != null) n.value = defaults.window;
+    if (defaults.period != null) n.value = defaults.period;
+    if (defaults.threshold != null) row.querySelector(".cond-threshold").value = defaults.threshold;
+  }
+
+  function readRequiredNumber(input, label) {
+    const raw = String(input.value == null ? "" : input.value).trim();
+    if (raw === "") throw new Error(`${label} is required`);
+    const n = Number(raw);
+    if (!Number.isFinite(n)) throw new Error(`${label} must be a number`);
+    return n;
+  }
+
+  function readRequiredInt(input, label) {
+    const n = readRequiredNumber(input, label);
+    if (!Number.isInteger(n)) throw new Error(`${label} must be a whole number`);
+    return n;
   }
 
   function readRulesFromDom() {
@@ -793,6 +849,21 @@
         } else if (type === "ma_stack") {
           const parsed = parseStack(row.querySelector(".cond-stack").value);
           conditions.push({ type, windows: parsed.windows, direction: parsed.direction });
+        } else if (type === "rel_volume") {
+          conditions.push({
+            type,
+            k: readRequiredNumber(row.querySelector(".cond-k"), "Relative volume k"),
+            window: readRequiredInt(row.querySelector(".cond-n"), "Relative volume N"),
+          });
+        } else if (isRsiType(type)) {
+          conditions.push({
+            type,
+            period: readRequiredInt(row.querySelector(".cond-n"), "RSI period"),
+            threshold: readRequiredNumber(row.querySelector(".cond-threshold"), "RSI threshold"),
+          });
+        } else if (isDonchianType(type)) {
+          const label = type === "donchian_high" ? "Donchian N" : "Donchian M";
+          conditions.push({ type, window: readRequiredInt(row.querySelector(".cond-n"), label) });
         } else {
           conditions.push({ type, window: Number(row.querySelector(".cond-window").value) });
         }
@@ -800,6 +871,40 @@
       rules[side] = { logic, conditions };
     });
     return rules;
+  }
+
+  function presetRules(which) {
+    if (which === "relvol") {
+      return {
+        long: {
+          logic: "AND",
+          conditions: [
+            { type: "price_gt_ma", window: 20 },
+            { type: "rel_volume", k: 1.5, window: 20 },
+          ],
+        },
+        flat: { logic: "OR", conditions: [{ type: "price_lt_ma", window: 20 }] },
+        short: { logic: "AND", conditions: [] },
+      };
+    }
+    if (which === "rsi") {
+      return {
+        long: { logic: "AND", conditions: [{ type: "rsi_lte", period: 2, threshold: 5 }] },
+        flat: {
+          logic: "OR",
+          conditions: [
+            { type: "price_gt_ma", window: 5 },
+            { type: "rsi_gte", period: 2, threshold: 70 },
+          ],
+        },
+        short: { logic: "AND", conditions: [] },
+      };
+    }
+    return {
+      long: { logic: "AND", conditions: [{ type: "donchian_high", window: 20 }] },
+      flat: { logic: "OR", conditions: [{ type: "donchian_low", window: 10 }] },
+      short: { logic: "AND", conditions: [] },
+    };
   }
 
   function renderStrategyList() {
@@ -953,8 +1058,22 @@
     bindScreener();
     $("rulesEditor").addEventListener("change", (e) => {
       const row = e.target.closest(".cond");
-      if (row && e.target.classList.contains("cond-type")) syncCondRow(row);
+      if (row && e.target.classList.contains("cond-type")) syncCondRow(row, true);
     });
+    const presets = $("strategyPresets");
+    if (presets) {
+      presets.addEventListener("click", (e) => {
+        const which = e.target.getAttribute && e.target.getAttribute("data-preset");
+        if (!which) return;
+        renderRules(presetRules(which));
+        const labels = {
+          relvol: "Volume breakout filled (k=1.5, N=20). Save to keep it.",
+          rsi: "Connors RSI(2) filled (entry ≤ 5, exit SMA(5) or RSI ≥ 70). Save to keep it.",
+          donchian: "Donchian 20/10 filled. Save to keep it.",
+        };
+        setHint("stStatus", labels[which] || "Preset filled");
+      });
+    }
     $("rulesEditor").addEventListener("click", (e) => {
       const add = e.target.getAttribute && e.target.getAttribute("data-add");
       if (add) {
