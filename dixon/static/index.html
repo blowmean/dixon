@@ -142,6 +142,18 @@
             <button id="btnSaveStrategy" type="submit">Save</button>
             <button id="btnDeleteStrategy" type="button" class="secondary">Delete</button>
           </div>
+          <div class="research-bar" id="strategyPresets">
+            <span class="hint">Public patterns</span>
+            <button type="button" class="secondary" data-preset="relvol">Volume breakout</button>
+            <button type="button" class="secondary" data-preset="rsi">Connors RSI(2)</button>
+            <button type="button" class="secondary" data-preset="donchian">Donchian 20/10</button>
+          </div>
+          <p class="hint predicate-note">
+            Relative volume is volume ≥ k × SMA(volume, N), default k=1.5 and N=20.
+            RSI takes a period and a threshold (Connors entry is RSI(2) ≤ 5).
+            Donchian enters when close breaks the prior N-bar high and exits when close breaks the prior M-bar low (classic 20/10).
+            Knobs are per condition — change them, then Save and run a backtest.
+          </p>
           <div id="rulesEditor"></div>
           <div class="research-bar backtest-bar">
             <label>Backtest from

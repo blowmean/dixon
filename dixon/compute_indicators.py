@@ -41,6 +41,31 @@ def sma(series: pd.Series, window: int) -> pd.Series:
     return series.rolling(window=window, min_periods=window).mean()
 
 
+def volume_sma(volume: pd.Series, window: int) -> pd.Series:
+    """SMA of volume ending on the current bar (the signal bar is included)."""
+    return sma(pd.to_numeric(volume, errors="coerce"), window)
+
+
+def prior_high(high: pd.Series, window: int) -> pd.Series:
+    """Max high of the previous `window` bars, excluding the current bar."""
+    return pd.to_numeric(high, errors="coerce").shift(1).rolling(window, min_periods=window).max()
+
+
+def prior_low(low: pd.Series, window: int) -> pd.Series:
+    """Min low of the previous `window` bars, excluding the current bar."""
+    return pd.to_numeric(low, errors="coerce").shift(1).rolling(window, min_periods=window).min()
+
+
+def series_by_date(dates: pd.Series, values: pd.Series) -> dict:
+    """Map each bar date to a finite value. Warm-up NaNs are omitted."""
+    out: dict = {}
+    for d, v in zip(dates.tolist(), values.tolist()):
+        if v is None or pd.isna(v):
+            continue
+        out[to_date(d)] = float(v)
+    return out
+
+
 def ema(series: pd.Series, span: int) -> pd.Series:
     # adjust=False → recursive EMA matching common Yahoo/Trading platforms seed
     return series.ewm(span=span, adjust=False, min_periods=span).mean()

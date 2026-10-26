@@ -129,6 +129,51 @@ See `dixon/calendars.py` and `dixon/rollup.py`.
 
 ---
 
+## Strategy predicates (single symbol)
+
+These are evaluated on the strategy timeframe's stored bars (daily, weekly, or monthly). They are not a second cross-sectional book. RSI is the cached Wilder series above (`RSI_{period}`). Volume SMA and Donchian levels are computed from that symbol's OHLC when a backtest needs them; they are not written into `indicator_cache`.
+
+### Relative volume — `rel_volume`
+
+\[
+V_t \ge k \times \mathrm{SMA}_N(V)_t
+\]
+
+\[
+\mathrm{SMA}_N(V)_t = \frac{1}{N}\sum_{i=0}^{N-1} V_{t-i}
+\]
+
+- Defaults: \(k = 1.5\), \(N = 20\). Both are stored on the condition.
+- The signal bar's volume is inside the average.
+- Warm-up (fewer than \(N\) volumes) or a non-positive average → condition is false.
+
+### RSI threshold — `rsi_lte` / `rsi_gte`
+
+Same Wilder RSI as `RSI_14`, with caller-supplied `period` (default 2) and `threshold` (default 5 for `rsi_lte`, 70 for `rsi_gte`).
+
+- `rsi_lte`: \(\mathrm{RSI}(\mathrm{period})_t \le \mathrm{threshold}\)
+- `rsi_gte`: \(\mathrm{RSI}(\mathrm{period})_t \ge \mathrm{threshold}\)
+- Missing warm-up value → false.
+
+A Connors-style entry is `rsi_lte` with period 2 and threshold 5. The exit can be the existing `price_gt_ma` (close > SMA(5)) or `rsi_gte`.
+
+### Donchian channel — `donchian_high` / `donchian_low`
+
+Prior channel, **excluding** the signal bar (a close cannot exceed that bar's own high):
+
+\[
+\mathrm{High}^{(N)}_t = \max(H_{t-N},\ldots,H_{t-1})
+\]
+\[
+\mathrm{Low}^{(M)}_t = \min(L_{t-M},\ldots,L_{t-1})
+\]
+
+- `donchian_high`: \(C_t > \mathrm{High}^{(N)}_t\). Default \(N = 20\).
+- `donchian_low`: \(C_t < \mathrm{Low}^{(M)}_t\). Default \(M = 10\).
+- Warm-up → false. No ATR stop is applied.
+
+---
+
 ## QA tips
 
 1. Compare golden symbols (`0700.HK`, `0005.HK`, `AAPL`, `MSFT`, `SPY`) adjusted daily close vs Yahoo within 1 tick.
