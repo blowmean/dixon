@@ -149,6 +149,174 @@
     };
   }
 
+  // Each pane is its own chart. A shared logical range lines up dates only when
+  // every pane has the same bar times, and only when the plot areas have the
+  // same width. Indicator warm-up used to drop leading bars (so index 0 was a
+  // different day), and a wider right scale (MACD's extra decimals) squeezed
+  // that pane's plot. Whitespace keeps the timeline; minimumWidth shares the edge.
+  let syncingTime = false;
+  let syncingCrosshair = false;
+
+  function paneCharts() {
+    return [state.priceChart, state.rsiChart, state.macdChart].filter(Boolean);
+  }
+
+  function chartIsShown(id) {
+    const el = $(id);
+    return !!el && el.style.display !== "none";
+  }
+
+  function visiblePaneCharts() {
+    const charts = [];
+    if (state.priceChart && chartIsShown("price-chart")) charts.push(state.priceChart);
+    if (state.rsiChart && chartIsShown("rsi-chart")) charts.push(state.rsiChart);
+    if (state.macdChart && chartIsShown("macd-chart")) charts.push(state.macdChart);
+    return charts;
+  }
+
+  function alignRightPriceScales() {
+    const charts = visiblePaneCharts();
+    if (charts.length < 2) return;
+    let max = 0;
+    const widths = charts.map((chart) => {
+      const width = chart.priceScale("right").width();
+      if (width > max) max = width;
+      return width;
+    });
+    if (max < 1 || widths.every((width) => max - width <= 0.5)) return;
+    charts.forEach((chart) => {
+      chart.priceScale("right").applyOptions({ minimumWidth: max });
+    });
+  }
+
+  function chartId(chart) {
+    if (chart === state.priceChart) return "price-chart";
+    if (chart === state.rsiChart) return "rsi-chart";
+    if (chart === state.macdChart) return "macd-chart";
+    return "";
+  }
+
+  function syncTimeScale(src, range) {
+    if (syncingTime || !src || !range) return;
+    // Hidden panes have no plot width. Pushing a range onto one (or copying a
+    // range out of one after setData) shifts the logical index base, and the
+    // next time that pane is shown every chart scrolls past the last bar.
+    if (!chartIsShown(chartId(src))) return;
+    const charts = visiblePaneCharts();
+    if (charts.indexOf(src) < 0) return;
+    syncingTime = true;
+    try {
+      // Forward the range from the callback. getVisibleLogicalRange() still
+      // returns the previous range for a frame, and writing that back scrolls
+      // the panes into empty space.
+      alignRightPriceScales();
+      charts.forEach((chart) => {
+        if (chart === src) return;
+        try {
+          chart.timeScale().setVisibleLogicalRange(range);
+        } catch (_) {}
+      });
+    } finally {
+      syncingTime = false;
+    }
+  }
+
+  function fitPanes() {
+    const price = state.priceChart;
+    if (!price) return;
+    // fitContent does not notify when the price pane is already fitted. A pane
+    // that just received bars would otherwise keep its own default range.
+    let notified = false;
+    const mark = () => {
+      notified = true;
+    };
+    price.timeScale().subscribeVisibleLogicalRangeChange(mark);
+    price.timeScale().fitContent();
+    price.timeScale().unsubscribeVisibleLogicalRangeChange(mark);
+    if (notified) return;
+    const range = price.timeScale().getVisibleLogicalRange();
+    if (!range) return;
+    syncingTime = true;
+    try {
+      alignRightPriceScales();
+      visiblePaneCharts().forEach((chart) => {
+        if (chart === price) return;
+        try {
+          chart.timeScale().setVisibleLogicalRange(range);
+        } catch (_) {}
+      });
+    } finally {
+      syncingTime = false;
+    }
+  }
+
+  function seriesForChart(chart) {
+    if (chart === state.priceChart) return state.candleSeries;
+    if (chart === state.rsiChart) return state.rsiSeries;
+    return state.macdLine;
+  }
+
+  function priceOfPoint(point) {
+    if (!point) return null;
+    if (point.value != null && !Number.isNaN(point.value)) return point.value;
+    if (point.close != null && !Number.isNaN(point.close)) return point.close;
+    return null;
+  }
+
+  function priceAtLogical(series, logical) {
+    if (!series || logical == null || Number.isNaN(logical)) return null;
+    const index = Math.round(logical);
+    let point = series.dataByIndex(index);
+    if (priceOfPoint(point) == null) {
+      point = series.dataByIndex(index, LightweightCharts.MismatchDirection.NearestLeft);
+    }
+    return priceOfPoint(point);
+  }
+
+  function syncCrosshair(src, param) {
+    if (syncingCrosshair) return;
+    const charts = visiblePaneCharts();
+    syncingCrosshair = true;
+    try {
+      charts.forEach((chart) => {
+        if (chart === src) return;
+        const series = seriesForChart(chart);
+        const time = param && param.time;
+        if (!series || time == null) {
+          chart.clearCrosshairPosition();
+          return;
+        }
+        let price = priceAtLogical(series, param.logical);
+        if (price == null && chart.paneSize) {
+          const size = chart.paneSize();
+          price = size ? series.coordinateToPrice(size.height / 2) : null;
+        }
+        if (price == null || Number.isNaN(price)) {
+          chart.clearCrosshairPosition();
+          return;
+        }
+        chart.setCrosshairPosition(price, time, series);
+      });
+    } catch (_) {
+      /* a pane that has no bars yet has nothing to anchor */
+    } finally {
+      syncingCrosshair = false;
+    }
+  }
+
+  function panePoints(series, orderedDates) {
+    const values = new Map();
+    (series || []).forEach((p) => {
+      if (!p || p.date == null || p.value == null || Number.isNaN(Number(p.value))) return;
+      values.set(p.date, Number(p.value));
+    });
+    return orderedDates.map((date) => {
+      const time = businessDay(date);
+      const value = values.get(date);
+      return value == null ? { time } : { time, value };
+    });
+  }
+
   function ensureCharts() {
     if (state.priceChart) return;
 
@@ -199,13 +367,12 @@
       priceLineVisible: false,
     });
 
-    const charts = [state.priceChart, state.rsiChart, state.macdChart];
-    charts.forEach((src) => {
+    paneCharts().forEach((src) => {
       src.timeScale().subscribeVisibleLogicalRangeChange((range) => {
-        if (!range) return;
-        charts.forEach((c) => {
-          if (c !== src) c.timeScale().setVisibleLogicalRange(range);
-        });
+        syncTimeScale(src, range);
+      });
+      src.subscribeCrosshairMove((param) => {
+        syncCrosshair(src, param);
       });
     });
 
@@ -576,11 +743,9 @@
         value: b.volume || 0,
         color: b.close >= b.open ? "rgba(38,166,154,0.4)" : "rgba(239,83,80,0.4)",
       }));
-      state.candleSeries.setData(candleData);
-      state.volumeSeries.setData(volData);
-      state.barDates = new Set(bars.map((b) => b.date));
+      const orderedDates = bars.map((b) => b.date);
+      state.barDates = new Set(orderedDates);
 
-      clearPriceOverlays();
       const indNames = selectedIndicators();
       const showRsi = paneEnabled("rsi");
       const showMacd = paneEnabled("macd");
@@ -598,46 +763,59 @@
         : { series: {} };
       const byName = fetched.series || {};
 
-      indNames.forEach((n) => {
-        const aligned = alignSeries(byName[n], state.barDates);
-        if (n.startsWith("BB_")) {
-          addLine(n, aligned, IND_COLORS[n], {
-            lineStyle: n === "BB_MID_20_2" ? 0 : 2,
-            lineWidth: n === "BB_MID_20_2" ? 1 : 1,
-          });
+      // setData publishes an intermediate range. Hold sync until fitContent so
+      // that range cannot replace the fitted one on the other panes.
+      syncingTime = true;
+      try {
+        state.candleSeries.setData(candleData);
+        state.volumeSeries.setData(volData);
+        clearPriceOverlays();
+        indNames.forEach((n) => {
+          const aligned = alignSeries(byName[n], state.barDates);
+          if (n.startsWith("BB_")) {
+            addLine(n, aligned, IND_COLORS[n], {
+              lineStyle: n === "BB_MID_20_2" ? 0 : 2,
+              lineWidth: n === "BB_MID_20_2" ? 1 : 1,
+            });
+          } else {
+            addLine(n, aligned, IND_COLORS[n]);
+          }
+        });
+        if (showRsi) {
+          state.rsiSeries.setData(panePoints(byName.RSI_14, orderedDates));
         } else {
-          addLine(n, aligned, IND_COLORS[n]);
+          state.rsiSeries.setData([]);
+          state.rsiChart.timeScale().resetTimeScale();
         }
-      });
 
-      if (showRsi) {
-        state.rsiSeries.setData(alignSeries(byName.RSI_14, state.barDates));
-      } else {
-        state.rsiSeries.setData([]);
+        if (showMacd) {
+          const macd = panePoints(byName.MACD_12_26_9, orderedDates);
+          const sig = panePoints(byName.MACD_SIGNAL_12_26_9, orderedDates);
+          const histRaw = panePoints(byName.MACD_HIST_12_26_9, orderedDates);
+          state.macdLine.setData(macd);
+          state.macdSignal.setData(sig);
+          state.macdHist.setData(
+            histRaw.map((p) =>
+              p.value == null
+                ? p
+                : {
+                    ...p,
+                    color: p.value >= 0 ? "rgba(38,166,154,0.7)" : "rgba(239,83,80,0.7)",
+                  }
+            )
+          );
+        } else {
+          state.macdLine.setData([]);
+          state.macdSignal.setData([]);
+          state.macdHist.setData([]);
+          state.macdChart.timeScale().resetTimeScale();
+        }
+
+        resizeCharts();
+      } finally {
+        syncingTime = false;
       }
-
-      if (showMacd) {
-        const macd = alignSeries(byName.MACD_12_26_9, state.barDates);
-        const sig = alignSeries(byName.MACD_SIGNAL_12_26_9, state.barDates);
-        const histRaw = alignSeries(byName.MACD_HIST_12_26_9, state.barDates);
-        state.macdLine.setData(macd);
-        state.macdSignal.setData(sig);
-        state.macdHist.setData(
-          histRaw.map((p) => ({
-            ...p,
-            color: p.value >= 0 ? "rgba(38,166,154,0.7)" : "rgba(239,83,80,0.7)",
-          }))
-        );
-      } else {
-        state.macdLine.setData([]);
-        state.macdSignal.setData([]);
-        state.macdHist.setData([]);
-      }
-
-      state.priceChart.timeScale().fitContent();
-      if (showRsi) state.rsiChart.timeScale().fitContent();
-      if (showMacd) state.macdChart.timeScale().fitContent();
-      resizeCharts();
+      fitPanes();
 
       setStatus(
         `${symbol} ${timeframe}: ${bars.length} bars · ${indNames.length} price overlays`
