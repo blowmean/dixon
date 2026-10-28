@@ -446,7 +446,13 @@ def test_research_panel_exposes_predicate_knobs_and_presets():
     assert "PREDICATE_DEFAULTS" in script
     assert "k: 1.5" in script and "window: 20" in script
     assert "threshold: 5" in script and "threshold: 70" in script
-    assert 'data-preset="relvol"' in html
-    assert 'data-preset="rsi"' in html
-    assert 'data-preset="donchian"' in html
+    assert "PUBLIC_PATTERNS" in script
+    assert 'id: "relvol"' in script and 'id: "rsi"' in script and 'id: "donchian"' in script
+    assert "data-description" in script and "aria-describedby" in script
+    assert "1.5× SMA(volume, 20)" in script and "close is below MA20" in script
+    assert "RSI(2) is 5 or below" in script and "close is above MA5" in script
+    assert "RSI(2) is 70 or above" in script
+    assert "prior 20-bar high" in script and "prior 10-bar low" in script
+    assert 'id="strategyPresets"' in html
+    assert "predicate-note" in html
     assert "cond-k" in script and "cond-threshold" in script and "cond-n" in script

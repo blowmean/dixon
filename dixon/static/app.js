@@ -1051,9 +1051,16 @@
     return rules;
   }
 
-  function presetRules(which) {
-    if (which === "relvol") {
-      return {
+  // Street presets. `description` is the hover/focus tooltip; `rules` is what
+  // the button fills. A later preset can carry the same fields and render itself.
+  const PUBLIC_PATTERNS = [
+    {
+      id: "relvol",
+      label: "Volume breakout",
+      description:
+        "Relative-volume spike. Long when volume is at least 1.5× SMA(volume, 20) and close is above MA20. Exit when close is below MA20.",
+      filled: "Volume breakout filled (k=1.5, N=20). Save to keep it.",
+      rules: {
         long: {
           logic: "AND",
           conditions: [
@@ -1063,10 +1070,15 @@
         },
         flat: { logic: "OR", conditions: [{ type: "price_lt_ma", window: 20 }] },
         short: { logic: "AND", conditions: [] },
-      };
-    }
-    if (which === "rsi") {
-      return {
+      },
+    },
+    {
+      id: "rsi",
+      label: "Connors RSI(2)",
+      description:
+        "Mean reversion. Long when RSI(2) is 5 or below. Exit when close is above MA5, or when RSI(2) is 70 or above.",
+      filled: "Connors RSI(2) filled (entry ≤ 5, exit SMA(5) or RSI ≥ 70). Save to keep it.",
+      rules: {
         long: { logic: "AND", conditions: [{ type: "rsi_lte", period: 2, threshold: 5 }] },
         flat: {
           logic: "OR",
@@ -1076,13 +1088,132 @@
           ],
         },
         short: { logic: "AND", conditions: [] },
-      };
+      },
+    },
+    {
+      id: "donchian",
+      label: "Donchian 20/10",
+      description:
+        "Channel breakout. Long when close is above the prior 20-bar high. Exit when close is below the prior 10-bar low.",
+      filled: "Donchian 20/10 filled. Save to keep it.",
+      rules: {
+        long: { logic: "AND", conditions: [{ type: "donchian_high", window: 20 }] },
+        flat: { logic: "OR", conditions: [{ type: "donchian_low", window: 10 }] },
+        short: { logic: "AND", conditions: [] },
+      },
+    },
+  ];
+
+  function patternById(which) {
+    for (let i = 0; i < PUBLIC_PATTERNS.length; i++) {
+      if (PUBLIC_PATTERNS[i].id === which) return PUBLIC_PATTERNS[i];
     }
-    return {
-      long: { logic: "AND", conditions: [{ type: "donchian_high", window: 20 }] },
-      flat: { logic: "OR", conditions: [{ type: "donchian_low", window: 10 }] },
-      short: { logic: "AND", conditions: [] },
-    };
+    return null;
+  }
+
+  function patternTooltip(pattern) {
+    return (pattern && (pattern.description || pattern.tooltip)) || "";
+  }
+
+  function presetRules(which) {
+    const pattern = patternById(which) || patternById("donchian");
+    return JSON.parse(JSON.stringify(pattern.rules));
+  }
+
+  function renderPublicPatterns() {
+    const root = $("strategyPresets");
+    if (!root) return;
+    root.querySelectorAll("[data-preset]").forEach((el) => el.remove());
+    let descRoot = root.querySelector(".preset-desc-root");
+    if (!descRoot) {
+      descRoot = document.createElement("div");
+      descRoot.className = "preset-desc-root";
+      root.appendChild(descRoot);
+    }
+    descRoot.replaceChildren();
+    PUBLIC_PATTERNS.forEach((pattern) => {
+      const text = patternTooltip(pattern);
+      const descId = "preset-desc-" + pattern.id;
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "secondary";
+      btn.setAttribute("data-preset", pattern.id);
+      btn.setAttribute("data-description", text);
+      if (text) btn.setAttribute("aria-describedby", descId);
+      btn.textContent = pattern.label;
+      root.insertBefore(btn, descRoot);
+      if (!text) return;
+      const desc = document.createElement("span");
+      desc.id = descId;
+      desc.textContent = text;
+      descRoot.appendChild(desc);
+    });
+  }
+
+  function bindPresetTooltips(presets) {
+    if (presets.dataset.tips === "1") return;
+    presets.dataset.tips = "1";
+    const tip = document.createElement("div");
+    tip.id = "presetTooltip";
+    tip.className = "preset-tooltip";
+    tip.setAttribute("aria-hidden", "true");
+    tip.hidden = true;
+    document.body.appendChild(tip);
+
+    function buttonFrom(node) {
+      if (!node || !node.closest) return null;
+      const btn = node.closest("[data-preset]");
+      return btn && presets.contains(btn) ? btn : null;
+    }
+
+    function hide() {
+      tip.hidden = true;
+    }
+
+    function show(btn) {
+      const text = btn.getAttribute("data-description") || "";
+      if (!text) {
+        hide();
+        return;
+      }
+      tip.textContent = text;
+      tip.hidden = false;
+      tip.style.visibility = "hidden";
+      const rect = btn.getBoundingClientRect();
+      const maxWidth = Math.min(352, window.innerWidth - 16);
+      tip.style.maxWidth = maxWidth + "px";
+      let left = rect.left;
+      if (left + tip.offsetWidth > window.innerWidth - 8) {
+        left = window.innerWidth - tip.offsetWidth - 8;
+      }
+      if (left < 8) left = 8;
+      let top = rect.bottom + 6;
+      if (top + tip.offsetHeight > window.innerHeight - 8) {
+        top = rect.top - tip.offsetHeight - 6;
+      }
+      if (top < 8) top = 8;
+      tip.style.left = left + "px";
+      tip.style.top = top + "px";
+      tip.style.visibility = "visible";
+    }
+
+    presets.addEventListener("mouseover", (e) => {
+      const btn = buttonFrom(e.target);
+      if (btn) show(btn);
+    });
+    presets.addEventListener("mouseout", (e) => {
+      const btn = buttonFrom(e.target);
+      if (!btn || buttonFrom(e.relatedTarget) !== btn) hide();
+    });
+    presets.addEventListener("focusin", (e) => {
+      const btn = buttonFrom(e.target);
+      if (btn) show(btn);
+    });
+    presets.addEventListener("focusout", (e) => {
+      if (buttonFrom(e.target) && buttonFrom(e.relatedTarget) !== buttonFrom(e.target)) hide();
+    });
+    window.addEventListener("scroll", hide, true);
+    window.addEventListener("resize", hide);
   }
 
   function renderStrategyList() {
@@ -1240,16 +1371,15 @@
     });
     const presets = $("strategyPresets");
     if (presets) {
+      renderPublicPatterns();
+      bindPresetTooltips(presets);
       presets.addEventListener("click", (e) => {
-        const which = e.target.getAttribute && e.target.getAttribute("data-preset");
+        const btn = e.target.closest && e.target.closest("[data-preset]");
+        const which = btn && presets.contains(btn) ? btn.getAttribute("data-preset") : "";
         if (!which) return;
         renderRules(presetRules(which));
-        const labels = {
-          relvol: "Volume breakout filled (k=1.5, N=20). Save to keep it.",
-          rsi: "Connors RSI(2) filled (entry ≤ 5, exit SMA(5) or RSI ≥ 70). Save to keep it.",
-          donchian: "Donchian 20/10 filled. Save to keep it.",
-        };
-        setHint("stStatus", labels[which] || "Preset filled");
+        const pattern = patternById(which);
+        setHint("stStatus", (pattern && pattern.filled) || "Preset filled");
       });
     }
     $("rulesEditor").addEventListener("click", (e) => {
