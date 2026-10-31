@@ -853,6 +853,11 @@
     return (Number(value) * 100).toFixed(2) + "%";
   }
 
+  function fmtDrawdown(value) {
+    if (value == null || Number.isNaN(Number(value))) return "—";
+    return (Number(value) * 100).toFixed(4) + "%";
+  }
+
   async function loadScreener() {
     const marketEl = $("scrMarket");
     const table = $("scrTable");
@@ -1457,7 +1462,9 @@
     "No overnight board yet. After the daily ingest, run python -m dixon.strategy_board.";
 
   function boardValue(row, key) {
-    if (key === "total_pnl" || key === "trade_count" || key === "rank") return Number(row[key]);
+    if (key === "total_pnl" || key === "max_drawdown" || key === "trade_count" || key === "rank") {
+      return Number(row[key]);
+    }
     return String(row[key] == null ? "" : row[key]);
   }
 
@@ -1496,7 +1503,7 @@
       const tr = document.createElement("tr");
       tr.className = "board-empty";
       const td = document.createElement("td");
-      td.colSpan = 6;
+      td.colSpan = 7;
       td.textContent = boardEmptyMessage;
       tr.appendChild(td);
       body.appendChild(tr);
@@ -1511,6 +1518,7 @@
         `<td>${esc(row.rank)}</td>` +
         `<td title="${esc(row.rule_id || "")}">${esc(row.summary)}</td>` +
         `<td class="${pnlClass}">${fmtNum(row.total_pnl, 2)}</td>` +
+        `<td>${fmtDrawdown(row.max_drawdown)}</td>` +
         `<td>${esc(row.trade_count)}</td>` +
         `<td>${esc(row.as_of)}</td>`;
       tr.addEventListener("click", () => openBoardRow(row));
@@ -1556,7 +1564,7 @@
       const data = await apiGet(`/strategy-board?${q}`);
       if (data.as_of && dayEl && !day) dayEl.value = data.as_of;
       boardRows = data.rows || [];
-      const version = data.grid_version || "s1-v1";
+      const version = data.grid_version || "s1-board-v1";
       const costs = data.costs_flag ? ` · costs ${data.costs_flag}` : "";
       const when = data.as_of || "—";
       const span =

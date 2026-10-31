@@ -1,14 +1,15 @@
 {
   "as_of": "2024-11-19",
   "costs_flag": "us-v1.2",
-  "grid_version": "s1-v1",
+  "grid_version": "s1-board-v1",
   "rows": [
     {
       "as_of": "2024-11-19",
       "costs_flag": "us-v1.2",
       "family": "anchor",
-      "grid_version": "s1-v1",
+      "grid_version": "s1-board-v1",
       "market": "US",
+      "max_drawdown": 0.02682176,
       "params": {
         "preset": "roc7"
       },
@@ -52,8 +53,9 @@
       "as_of": "2024-11-19",
       "costs_flag": "us-v1.2",
       "family": "anchor",
-      "grid_version": "s1-v1",
+      "grid_version": "s1-board-v1",
       "market": "US",
+      "max_drawdown": 0.02679481,
       "params": {
         "preset": "relvol"
       },
@@ -99,8 +101,9 @@
       "as_of": "2024-11-19",
       "costs_flag": "us-v1.2",
       "family": "rvol",
-      "grid_version": "s1-v1",
+      "grid_version": "s1-board-v1",
       "market": "US",
+      "max_drawdown": 0.02679481,
       "params": {
         "flat_ma": 20,
         "k": 1.2,

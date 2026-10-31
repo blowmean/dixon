@@ -1,4 +1,4 @@
-"""US Top-50 overnight board: s1-v1 grid, US v1.2 costs, bit-stable golden."""
+"""US Top-50 overnight board: s1-board-v1 grid, US v1.2 costs, bit-stable golden."""
 
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ from dixon.strategy_board import (
     write_board_rows,
 )
 
-FIXTURE = Path(__file__).parent / "fixtures" / "strategy_board_s1_v1_aapl.json"
+FIXTURE = Path(__file__).parent / "fixtures" / "strategy_board_s1_board_v1_aapl.json"
 GOLDEN_N = 122
 GOLDEN_START = date(2024, 6, 3)
 POOL_DAY = date(2024, 7, 1)
@@ -153,6 +153,7 @@ def _stored_row(
         "params_json": '{"preset":"roc7"}',
         "summary": rule_id,
         "total_pnl": pnl,
+        "max_drawdown": 0.0,
         "trade_count": trades,
         "window_start": rolling_window(as_of)[0],
         "window_end": as_of,
@@ -172,6 +173,7 @@ def _scored(symbol, start, end, pnl, rule_id="anchor/roc7", trades=1):
         "rules": EMPTY_RULES,
         "rules_json": EMPTY_RULES_JSON,
         "total_pnl": pnl,
+        "max_drawdown": 0.0,
         "trade_count": trades,
         "window_start": start,
         "window_end": end,
@@ -189,7 +191,7 @@ def _condition_types(rules: dict) -> set[str]:
 
 def test_grid_catalog_is_frozen_s1_v1():
     cells = grid_cells()
-    assert GRID_VERSION == "s1-v1"
+    assert GRID_VERSION == "s1-board-v1"
     assert TOP_N == 3
     assert tuple(c.rule_id for c in cells) == EXPECTED_IDS
     by_id = {c.rule_id: c for c in cells}
@@ -273,21 +275,29 @@ def test_costs_flag_matches_us_v12_defaults():
     assert model.capital_usd == 100_000.0
 
 
-def test_rank_tie_break_is_pnl_then_fewer_trades_then_rule_id():
-    def row(rule_id, pnl, trades):
-        return {"rule_id": rule_id, "total_pnl": pnl, "trade_count": trades}
+def test_rank_tie_break_is_pnl_then_drawdown_then_trades_then_name():
+    def row(rule_id, pnl, dd, trades):
+        return {
+            "rule_id": rule_id,
+            "total_pnl": pnl,
+            "max_drawdown": dd,
+            "trade_count": trades,
+        }
 
     ranked = rank_rows(
         [
-            row("b", 1.0, 2),
-            row("a", 1.0, 2),
-            row("c", 1.0, 1),
-            row("d", 5.0, 9),
-            row("e", -1.0, 0),
-            row("f", 1.0, 2),
+            row("b", 1.0, 0.10, 2),
+            row("a", 1.0, 0.10, 2),
+            row("c", 1.0, 0.20, 1),
+            row("d", 5.0, 0.50, 9),
+            row("e", -1.0, 0.01, 0),
+            row("f", 1.0, 0.10, 3),
         ]
     )
-    assert [r["rule_id"] for r in ranked] == ["d", "c", "a"]
+    # d wins on P&L despite the worst drawdown. a beats b on the same P&L,
+    # drawdown, and trade count because the rule id sorts first. c has fewer
+    # trades than a but a deeper drawdown, so it stays out of the top 3.
+    assert [r["rule_id"] for r in ranked] == ["d", "a", "b"]
     assert [r["rank"] for r in ranked] == [1, 2, 3]
 
 
@@ -444,7 +454,7 @@ def test_board_api_empty_auth_and_hk_rejected(monkeypatch):
     body = empty.json()
     assert body["rows"] == []
     assert body["as_of"] is None
-    assert body["grid_version"] == "s1-v1"
+    assert body["grid_version"] == "s1-board-v1"
     assert body["universe"] == "us-top50"
     assert body["top_n"] == 3
     assert body["costs_flag"] is None
@@ -474,6 +484,7 @@ def test_ui_exposes_the_board_tab():
     assert 'id="boardTable"' in page.text
     assert 'id="btnBoard"' in page.text
     assert "1y P&amp;L" in page.text or "1y P&L" in page.text
+    assert "Max DD" in page.text
     js = client.get("/ui/app.js")
     assert js.status_code == 200
     text = js.text
@@ -494,14 +505,14 @@ def test_cli_help_and_empty_database(tmp_path, capsys):
         check=False,
     )
     assert proc.returncode == 0
-    assert "s1-v1" in proc.stdout
+    assert "s1-board-v1" in proc.stdout
     db = tmp_path / "empty.duckdb"
     with pytest.raises(SystemExit) as exc:
         main(["--db", str(db)])
     assert exc.value.code == 0
     summary = json.loads(capsys.readouterr().out)
     assert summary["status"] == "no_session"
-    assert summary["grid_version"] == "s1-v1"
+    assert summary["grid_version"] == "s1-board-v1"
 
 
 def _roundtrip(payload):
@@ -557,7 +568,7 @@ def test_golden_aapl_board_is_bit_stable_and_uses_us_costs():
         con.close()
 
     assert first["status"] == "ok"
-    assert first["grid_version"] == "s1-v1"
+    assert first["grid_version"] == "s1-board-v1"
     assert first["costs_flag"] == "us-v1.2"
     assert first["universe"] == "us-top50"
     assert first["symbol_count"] == 1
@@ -565,6 +576,12 @@ def test_golden_aapl_board_is_bit_stable_and_uses_us_costs():
     assert second["row_count"] == 3
     assert again == board
     assert [row["rank"] for row in board["rows"]] == [1, 2, 3]
+    # Ranks 2 and 3 tie on P&L, max drawdown, and trade count, so rule_id ASC decides.
+    tied = board["rows"][1:]
+    assert tied[0]["total_pnl"] == tied[1]["total_pnl"]
+    assert tied[0]["max_drawdown"] == tied[1]["max_drawdown"]
+    assert tied[0]["trade_count"] == tied[1]["trade_count"]
+    assert tied[0]["rule_id"] < tied[1]["rule_id"]
     assert {row["symbol"] for row in board["rows"]} == {"AAPL"}
     assert all(row["costs_flag"] == "us-v1.2" for row in board["rows"])
     assert all(row["market"] == "US" for row in board["rows"])
@@ -583,6 +600,7 @@ def test_golden_aapl_board_is_bit_stable_and_uses_us_costs():
     assert fresh["costs"]["us_commission_min"] == 1
     assert fresh["costs"]["us_commission_per_share"] == 0.005
     assert fresh["metrics"]["total_pnl"] == traded["total_pnl"]
+    assert fresh["metrics"]["max_drawdown"] == traded["max_drawdown"]
     assert fresh["metrics"]["trade_count"] == traded["trade_count"]
     assert traded["trade_count"] > 0
     assert fresh["metrics"]["total_pnl"] != zero["metrics"]["total_pnl"]
@@ -591,7 +609,7 @@ def test_golden_aapl_board_is_bit_stable_and_uses_us_costs():
 
 
 def write_golden_fixture(path: Path | None = None) -> dict:
-    """Regenerate tests/fixtures/strategy_board_s1_v1_aapl.json. Not used by pytest."""
+    """Regenerate tests/fixtures/strategy_board_s1_board_v1_aapl.json. Not used by pytest."""
     con = connect()
     try:
         as_of = seed_golden(con)

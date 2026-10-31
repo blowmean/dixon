@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Overnight US Top-50 strategy board (grid s1-v1, US v1.2 costs).
+# Overnight US Top-50 strategy board (grid s1-board-v1, US v1.2 costs).
 #
 # Run after the daily EOD ingest. This does not download bars.
 #

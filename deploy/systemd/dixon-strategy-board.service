@@ -6,7 +6,7 @@
 # and ExecStartPost both call.
 
 [Unit]
-Description=Dixon US Top-50 overnight strategy board (grid s1-v1)
+Description=Dixon US Top-50 overnight strategy board (grid s1-board-v1)
 After=dixon-daily.service
 
 [Service]

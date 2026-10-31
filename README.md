@@ -139,9 +139,9 @@ Yahoo is best-effort SoT: rate-limit hard, expect gaps/restates; the daily job i
 
 ## Overnight US Top-50 strategy board
 
-Nightly ranking of complete strategies on the **US Top-50** (same turnover pool as `GET /screener/top50?market=US`). One symbol, daily bars, rolling **12 calendar months** ending on that session (`as_of`; 29 Feb rolls back to 28 Feb). Metric is the backtest's **total P&L** (ending equity minus the USD 100,000 start, so an open mark is included). Within each name, rank is higher P&L, then fewer **closed** trades, then `rule_id`. Only the **top 3** are stored.
+Nightly ranking of complete strategies on the **US Top-50** (same turnover pool as `GET /screener/top50?market=US`). One symbol, daily bars, rolling **12 calendar months** ending on that session (`as_of`; 29 Feb rolls back to 28 Feb). Metric is the backtest's **total P&L** (ending equity minus the USD 100,000 start, so an open mark is included). Within each name, rank is higher P&L, then **lower max drawdown**, then fewer **closed** trades, then `rule_id` ascending. `rule_id` is the stable rule/params name. `max_drawdown` is stored on each row (the same fraction the backtest reports, so 0.10 is 10%). Only the **top 3** are stored.
 
-Grid version **`s1-v1`**. Families are scored separately (no cartesian AND across families). Every cell is a full long/flat strategy, and every cell uses **US v1.2 cost defaults** with no overrides (`costs_flag` `us-v1.2`: $0.005/share, $1 minimum, 5 bps/side, 20% of equity).
+Grid version **`s1-board-v1`**. Families are scored separately (no cartesian AND across families). Every cell is a full long/flat strategy, and every cell uses **US v1.2 cost defaults** with no overrides (`costs_flag` `us-v1.2`: $0.005/share, $1 minimum, 5 bps/side, 20% of equity).
 
 | Family | Cells | Shape |
 | --- | --- | --- |
@@ -150,7 +150,7 @@ Grid version **`s1-v1`**. Families are scored separately (no cartesian AND acros
 | Donchian | (N, M) {(20, 10), (55, 20)} | Long `donchian_high` N, flat `donchian_low` M |
 | Anchors | 5 public presets | Volume breakout, Connors RSI(2), Donchian 20/10, ROC(7) ±1% with a 5% trail, EMA 9/21 + volume k=1.5 N=20 |
 
-The volume-breakout anchor is the same rules as RVOL k=1.5 N=20, and the Donchian anchor is the same rules as (20, 10). Both stay in the pool. A tie on P&L and trade count keeps the lexicographically smaller `rule_id` (`anchor/...` before `donchian/...` and `rvol/...`).
+The volume-breakout anchor is the same rules as RVOL k=1.5 N=20, and the Donchian anchor is the same rules as (20, 10). Both stay in the pool. When total P&L ties, the lower max drawdown wins, then fewer closed trades, then `rule_id` A–Z (`anchor/...` before `donchian/...` and `rvol/...`).
 
 ```bash
 python -m dixon.strategy_board
@@ -159,7 +159,7 @@ python -m dixon.strategy_board --symbols AAPL,MSFT   # replaces only those symbo
 ./scripts/strategy_board.sh
 ```
 
-`--as-of` defaults to the latest US session. The window is that date and the calendar date one year earlier, inclusive. Indicator warm-up still uses bars stored before the window; fills do not. A full run **replaces** the `(US, s1-v1, as_of)` slice, so the same bars rewrite the same rows. An empty Top-50 clears that night. `--symbols` does not.
+`--as-of` defaults to the latest US session. The window is that date and the calendar date one year earlier, inclusive. Indicator warm-up still uses bars stored before the window; fills do not. A full run **replaces** the `(US, s1-board-v1, as_of)` slice, so the same bars rewrite the same rows. An empty Top-50 clears that night. `--symbols` does not.
 
 Read it from the Board tab in `/ui/`, or:
 
@@ -218,7 +218,7 @@ python -m dixon.api
 | `GET /indicators?symbol=AAPL&name=RSI_14&from=2024-01-01` | One cached series. `timeframe=daily\|weekly\|monthly` (default daily). Missing series are computed and cached |
 | `GET /indicators?symbol=AAPL&names=MA_5,MA_20&timeframe=weekly` | Several series in one response (`series` is a map) |
 | `GET /screener/top50?market=HK\|US&date=YYYY-MM-DD` | That market's Top-50 by turnover. `date` defaults to the latest session |
-| `GET /strategy-board?as_of=YYYY-MM-DD&grid_version=s1-v1` | Overnight US Top-50 board. `as_of` defaults to the latest stored night. US only. Empty `rows` when that night has not been scored |
+| `GET /strategy-board?as_of=YYYY-MM-DD&grid_version=s1-board-v1` | Overnight US Top-50 board. `as_of` defaults to the latest stored night. US only. Each row includes `max_drawdown`. Empty `rows` when that night has not been scored |
 | `GET /strategies` | Strategies owned by the caller |
 | `POST /strategies` | Create one (`name`, `symbol`, `timeframe`, `rules`) |
 | `GET /strategies/{id}` | Owner-only |
@@ -415,7 +415,7 @@ project-dixon/
     rollup.py
     compute_indicators.py
     daily_job.py         # orchestrated daily catch-up
-    strategy_board.py    # overnight US Top-50 board (grid s1-v1)
+    strategy_board.py    # overnight US Top-50 board (grid s1-board-v1)
     api.py
     static/              # charts UI (lightweight-charts)
   indicators/FORMULAS.md # QA formula sheet

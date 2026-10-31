@@ -132,6 +132,7 @@
               <th data-sort="rank" aria-sort="none">Rank</th>
               <th data-sort="summary" aria-sort="none">Strategy</th>
               <th data-sort="total_pnl" aria-sort="none">1y P&amp;L</th>
+              <th data-sort="max_drawdown" aria-sort="none">Max DD</th>
               <th data-sort="trade_count" aria-sort="none">Trades</th>
               <th data-sort="as_of" aria-sort="none">As of</th>
             </tr>
@@ -236,7 +237,8 @@
     SMA menu (5 / 9 / 20 / 30 / 50 / 100 / 250) and the other overlays are cached in
     <code>indicator_cache</code> on the selected timeframe (D/W/M).
     Top-50 turnover pools are separate for HK and US.
-    The Board tab is the overnight US Top-50 ranking (grid s1-v1): top 3 strategies per name by rolling 1-year total P&amp;L.
+    The Board tab is the overnight US Top-50 ranking (grid s1-board-v1): top 3 strategies per name by rolling 1-year total P&amp;L.
+    A P&amp;L tie prefers lower max drawdown, then fewer closed trades, then rule id.
     Strategies are private to the Access email
     (or <code>DIXON_DEFAULT_OWNER</code> on localhost / API key).
     Win rate target &gt; 50% and max drawdown target 10% are display-only.

@@ -1,15 +1,17 @@
 """Overnight US Top-50 strategy board.
 
-Grid version ``s1-v1`` (frozen). Each US Top-50 name is scored on a rolling
+Grid version ``s1-board-v1`` (frozen). Each US Top-50 name is scored on a rolling
 12-month window with the single-name next-open backtest and US v1.2 cost
 defaults (no overrides). Families are searched separately — there is no
 cartesian AND across RSI, relative volume, and Donchian. Public presets are
 extra fixed cells (anchors), not a cross of those grids.
 
-Rank within a symbol: higher total P&L, then fewer closed trades, then
-``rule_id`` ascending. Persist the top 3 only. ``metrics.total_pnl`` is
-ending equity minus starting capital, so an open position's mark is included.
-``trade_count`` is closed round-trips only.
+Rank within a symbol: higher total P&L, then lower max drawdown, then fewer
+closed trades, then ``rule_id`` ascending. ``rule_id`` is the stable
+rule/params name (``rsi/p2/lte10``, ``anchor/roc7``). Persist the top 3 only.
+``metrics.total_pnl`` is ending equity minus starting capital, so an open
+position's mark is included. ``max_drawdown`` is the backtest fraction
+(0.10 means 10%). ``trade_count`` is closed round-trips only.
 
 A full run replaces the ``(market, grid_version, as_of)`` slice. The same
 bars therefore rewrite the same rows.
@@ -43,7 +45,7 @@ from dixon.yahoo import infer_market
 
 log = logging.getLogger("dixon.strategy_board")
 
-GRID_VERSION = "s1-v1"
+GRID_VERSION = "s1-board-v1"
 COSTS_FLAG = "us-v1.2"
 MARKET = "US"
 TOP_N = 3
@@ -235,7 +237,7 @@ def anchor_rules() -> list[tuple[str, str, dict[str, Any], dict[str, Any]]]:
 
 
 def grid_cells() -> tuple[GridCell, ...]:
-    """Frozen s1-v1 pool. Order is the catalogue order, not the rank order."""
+    """Frozen s1-board-v1 pool. Order is the catalogue order, not the rank order."""
     cells: list[GridCell] = []
     for period in _RSI_PERIODS:
         for threshold in _RSI_THRESHOLDS:
@@ -283,7 +285,7 @@ def grid_cells() -> tuple[GridCell, ...]:
         cells.append(_cell(rule_id, "anchor", summary, params, rules))
     ids = [c.rule_id for c in cells]
     if len(ids) != len(set(ids)):
-        raise RuntimeError("duplicate rule_id in s1-v1 grid")
+        raise RuntimeError("duplicate rule_id in s1-board-v1 grid")
     return tuple(cells)
 
 
@@ -301,11 +303,15 @@ def rolling_window(as_of: date) -> tuple[date, date]:
 
 
 def rank_rows(rows: list[dict[str, Any]], top_n: int = TOP_N) -> list[dict[str, Any]]:
-    """Highest total P&L, then fewer trades, then rule_id. Ranks start at 1."""
+    """Highest total P&L, then lower max drawdown, then fewer trades, then name.
+
+    The name is ``rule_id`` ascending: the stable rule/params string.
+    """
     ordered = sorted(
         rows,
         key=lambda r: (
             -round(float(r["total_pnl"]), 6),
+            round(float(r["max_drawdown"]), 8),
             int(r["trade_count"]),
             str(r["rule_id"]),
         ),
@@ -326,7 +332,7 @@ def score_symbol(
     window_end: date,
     market: str = MARKET,
 ) -> list[dict[str, Any]]:
-    """Score every s1-v1 cell. Costs are US v1.2 defaults (``cost_overrides`` omitted)."""
+    """Score every s1-board-v1 cell. Costs are US v1.2 defaults (``cost_overrides`` omitted)."""
     if market != MARKET:
         raise ValueError("strategy board scores US names only")
     scored: list[dict[str, Any]] = []
@@ -358,6 +364,7 @@ def score_symbol(
                 "rules": cell.rules(),
                 "rules_json": cell.rules_json,
                 "total_pnl": round(float(metrics["total_pnl"]), 6),
+                "max_drawdown": round(float(metrics["max_drawdown"]), 8),
                 "trade_count": int(metrics["trade_count"]),
                 "window_start": window_start,
                 "window_end": window_end,
@@ -458,6 +465,7 @@ def write_board_rows(
                 str(row["params_json"]),
                 str(row["summary"]),
                 round(float(row["total_pnl"]), 6),
+                round(float(row["max_drawdown"]), 8),
                 int(row["trade_count"]),
                 to_date(row["window_start"]),
                 to_date(row["window_end"]),
@@ -490,9 +498,9 @@ def write_board_rows(
             """
             INSERT INTO strategy_board (
               market, grid_version, as_of, symbol, rank, family, rule_id,
-              rules_json, params_json, summary, total_pnl, trade_count,
+              rules_json, params_json, summary, total_pnl, max_drawdown, trade_count,
               window_start, window_end, costs_flag
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             payloads,
         )
@@ -628,6 +636,7 @@ def _public_row(record: tuple[Any, ...]) -> dict[str, Any]:
         params_json,
         summary,
         total_pnl,
+        max_drawdown,
         trade_count,
         window_start,
         window_end,
@@ -645,6 +654,7 @@ def _public_row(record: tuple[Any, ...]) -> dict[str, Any]:
         "params": json.loads(params_json),
         "rules": json.loads(rules_json),
         "total_pnl": round(float(total_pnl), 6),
+        "max_drawdown": round(float(max_drawdown), 8),
         "trade_count": int(trade_count),
         "window_start": to_date(window_start).isoformat(),
         "window_end": to_date(window_end).isoformat(),
@@ -707,7 +717,7 @@ def read_board(
     records = con.execute(
         """
         SELECT as_of, grid_version, symbol, market, rank, family, rule_id,
-               rules_json, params_json, summary, total_pnl, trade_count,
+               rules_json, params_json, summary, total_pnl, max_drawdown, trade_count,
                window_start, window_end, costs_flag
         FROM strategy_board
         WHERE market = ? AND grid_version = ? AND as_of = ?
