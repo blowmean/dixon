@@ -137,6 +137,71 @@ Keep Mac awake or allow power-nap wake; if a day is skipped, the next run’s 14
 
 Yahoo is best-effort SoT: rate-limit hard, expect gaps/restates; the daily job is the recovery path.
 
+## Overnight US Top-50 strategy board
+
+Nightly ranking of complete strategies on the **US Top-50** (same turnover pool as `GET /screener/top50?market=US`). One symbol, daily bars, rolling **12 calendar months** ending on that session (`as_of`; 29 Feb rolls back to 28 Feb). Metric is the backtest's **total P&L** (ending equity minus the USD 100,000 start, so an open mark is included). Within each name, rank is higher P&L, then fewer **closed** trades, then `rule_id`. Only the **top 3** are stored.
+
+Grid version **`s1-v1`**. Families are scored separately (no cartesian AND across families). Every cell is a full long/flat strategy, and every cell uses **US v1.2 cost defaults** with no overrides (`costs_flag` `us-v1.2`: $0.005/share, $1 minimum, 5 bps/side, 20% of equity).
+
+| Family | Cells | Shape |
+| --- | --- | --- |
+| RSI | period {2, 5, 7, 14} × `rsi_lte` {10, 20, 30} | Long `rsi_lte`. Flat (OR) close > SMA(5) or `rsi_gte` **70** on the **same period**. Same exit as the Connors preset; the preset's entry of RSI(2) ≤ 5 is an anchor, not a grid point |
+| RVOL | k {1.2, 1.5, 2.0} × N {10, 20} | Public volume breakout: long close > MA(20) AND `rel_volume`; flat close < MA(20). The price filter stays at 20 (10 is not an SMA-menu window) |
+| Donchian | (N, M) {(20, 10), (55, 20)} | Long `donchian_high` N, flat `donchian_low` M |
+| Anchors | 5 public presets | Volume breakout, Connors RSI(2), Donchian 20/10, ROC(7) ±1% with a 5% trail, EMA 9/21 + volume k=1.5 N=20 |
+
+The volume-breakout anchor is the same rules as RVOL k=1.5 N=20, and the Donchian anchor is the same rules as (20, 10). Both stay in the pool. A tie on P&L and trade count keeps the lexicographically smaller `rule_id` (`anchor/...` before `donchian/...` and `rvol/...`).
+
+```bash
+python -m dixon.strategy_board
+python -m dixon.strategy_board --as-of 2026-10-30
+python -m dixon.strategy_board --symbols AAPL,MSFT   # replaces only those symbols
+./scripts/strategy_board.sh
+```
+
+`--as-of` defaults to the latest US session. The window is that date and the calendar date one year earlier, inclusive. Indicator warm-up still uses bars stored before the window; fills do not. A full run **replaces** the `(US, s1-v1, as_of)` slice, so the same bars rewrite the same rows. An empty Top-50 clears that night. `--symbols` does not.
+
+Read it from the Board tab in `/ui/`, or:
+
+```bash
+curl -s 'http://127.0.0.1:8765/strategy-board'
+curl -s 'http://127.0.0.1:8765/strategy-board?as_of=2026-10-30'
+```
+
+The page shows `grid_version` and `as_of`. If no night is stored, the table says to run the command above. Click a row to load that symbol on the chart (daily, window dates) and fill the strategy form. Save, then run the existing backtest.
+
+### systemd (darkstar — not installed by this repo)
+
+Daily ingest stays `dixon-daily.timer` (weekdays 07:30 HKT → `scripts/daily_job.sh`). Hook the board **after** that job, not inside it, so a chart-only restate does not always pay for the sweep.
+
+Preferred: a drop-in so the board runs only when the daily job exits 0 (a partial ingest, exit 2, skips it):
+
+```ini
+# ~/.config/systemd/user/dixon-daily.service.d/strategy-board.conf
+[Service]
+ExecStartPost=/home/paul/project-dixon/scripts/strategy_board.sh
+```
+
+Standalone timer if you would rather schedule by the clock (copies live in `deploy/systemd/`):
+
+```ini
+# ~/.config/systemd/user/dixon-strategy-board.service
+[Service]
+Type=oneshot
+WorkingDirectory=/home/paul/project-dixon
+ExecStart=/home/paul/project-dixon/scripts/strategy_board.sh
+
+# dixon-strategy-board.timer
+[Timer]
+OnCalendar=Mon..Fri 08:30:00 Asia/Hong_Kong
+Persistent=true
+```
+
+```bash
+systemctl --user daemon-reload
+systemctl --user enable --now dixon-strategy-board.timer
+```
+
 ## Personal batch API
 
 ```bash
@@ -153,6 +218,7 @@ python -m dixon.api
 | `GET /indicators?symbol=AAPL&name=RSI_14&from=2024-01-01` | One cached series. `timeframe=daily\|weekly\|monthly` (default daily). Missing series are computed and cached |
 | `GET /indicators?symbol=AAPL&names=MA_5,MA_20&timeframe=weekly` | Several series in one response (`series` is a map) |
 | `GET /screener/top50?market=HK\|US&date=YYYY-MM-DD` | That market's Top-50 by turnover. `date` defaults to the latest session |
+| `GET /strategy-board?as_of=YYYY-MM-DD&grid_version=s1-v1` | Overnight US Top-50 board. `as_of` defaults to the latest stored night. US only. Empty `rows` when that night has not been scored |
 | `GET /strategies` | Strategies owned by the caller |
 | `POST /strategies` | Create one (`name`, `symbol`, `timeframe`, `rules`) |
 | `GET /strategies/{id}` | Owner-only |
@@ -349,6 +415,7 @@ project-dixon/
     rollup.py
     compute_indicators.py
     daily_job.py         # orchestrated daily catch-up
+    strategy_board.py    # overnight US Top-50 board (grid s1-v1)
     api.py
     static/              # charts UI (lightweight-charts)
   indicators/FORMULAS.md # QA formula sheet
@@ -358,6 +425,8 @@ project-dixon/
   scripts/
     backfill.sh
     daily_job.sh
+    strategy_board.sh    # python -m dixon.strategy_board
+  deploy/systemd/        # board unit, timer, daily drop-in (not installed here)
   data/                  # created at runtime (gitignored)
     dixon.duckdb
     parquet/market=/timeframe=/year=/

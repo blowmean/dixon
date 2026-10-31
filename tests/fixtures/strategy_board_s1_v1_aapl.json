@@ -1,0 +1,152 @@
+{
+  "as_of": "2024-11-19",
+  "costs_flag": "us-v1.2",
+  "grid_version": "s1-v1",
+  "rows": [
+    {
+      "as_of": "2024-11-19",
+      "costs_flag": "us-v1.2",
+      "family": "anchor",
+      "grid_version": "s1-v1",
+      "market": "US",
+      "params": {
+        "preset": "roc7"
+      },
+      "rank": 1,
+      "rule_id": "anchor/roc7",
+      "rules": {
+        "flat": {
+          "conditions": [],
+          "logic": "AND"
+        },
+        "long": {
+          "conditions": [
+            {
+              "period": 7,
+              "threshold": 1.0,
+              "type": "roc_gte"
+            }
+          ],
+          "logic": "AND"
+        },
+        "short": {
+          "conditions": [
+            {
+              "period": 7,
+              "threshold": -1.0,
+              "type": "roc_lte"
+            }
+          ],
+          "logic": "AND"
+        },
+        "trail_pct": 5.0
+      },
+      "summary": "ROC(7) \u00b11% trail 5%",
+      "symbol": "AAPL",
+      "total_pnl": 12754.877812,
+      "trade_count": 3,
+      "window_end": "2024-11-19",
+      "window_start": "2023-11-19"
+    },
+    {
+      "as_of": "2024-11-19",
+      "costs_flag": "us-v1.2",
+      "family": "anchor",
+      "grid_version": "s1-v1",
+      "market": "US",
+      "params": {
+        "preset": "relvol"
+      },
+      "rank": 2,
+      "rule_id": "anchor/relvol",
+      "rules": {
+        "flat": {
+          "conditions": [
+            {
+              "type": "price_lt_ma",
+              "window": 20
+            }
+          ],
+          "logic": "OR"
+        },
+        "long": {
+          "conditions": [
+            {
+              "type": "price_gt_ma",
+              "window": 20
+            },
+            {
+              "k": 1.5,
+              "type": "rel_volume",
+              "window": 20
+            }
+          ],
+          "logic": "AND"
+        },
+        "short": {
+          "conditions": [],
+          "logic": "AND"
+        }
+      },
+      "summary": "Volume breakout k=1.5 N=20",
+      "symbol": "AAPL",
+      "total_pnl": 9804.059925,
+      "trade_count": 1,
+      "window_end": "2024-11-19",
+      "window_start": "2023-11-19"
+    },
+    {
+      "as_of": "2024-11-19",
+      "costs_flag": "us-v1.2",
+      "family": "rvol",
+      "grid_version": "s1-v1",
+      "market": "US",
+      "params": {
+        "flat_ma": 20,
+        "k": 1.2,
+        "long_ma": 20,
+        "window": 10
+      },
+      "rank": 3,
+      "rule_id": "rvol/k1.2/n10",
+      "rules": {
+        "flat": {
+          "conditions": [
+            {
+              "type": "price_lt_ma",
+              "window": 20
+            }
+          ],
+          "logic": "OR"
+        },
+        "long": {
+          "conditions": [
+            {
+              "type": "price_gt_ma",
+              "window": 20
+            },
+            {
+              "k": 1.2,
+              "type": "rel_volume",
+              "window": 10
+            }
+          ],
+          "logic": "AND"
+        },
+        "short": {
+          "conditions": [],
+          "logic": "AND"
+        }
+      },
+      "summary": "RVOL k=1.2 N=10; long close>MA20 and volume; flat close<MA20",
+      "symbol": "AAPL",
+      "total_pnl": 9804.059925,
+      "trade_count": 1,
+      "window_end": "2024-11-19",
+      "window_start": "2023-11-19"
+    }
+  ],
+  "symbol": "AAPL",
+  "window_end": "2024-11-19",
+  "window_start": "2023-11-19"
+}

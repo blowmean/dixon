@@ -1451,6 +1451,177 @@
     state.equityChart = chart;
   }
 
+  let boardRows = [];
+  let boardSort = { key: "symbol", dir: 1 };
+  let boardEmptyMessage =
+    "No overnight board yet. After the daily ingest, run python -m dixon.strategy_board.";
+
+  function boardValue(row, key) {
+    if (key === "total_pnl" || key === "trade_count" || key === "rank") return Number(row[key]);
+    return String(row[key] == null ? "" : row[key]);
+  }
+
+  function sortedBoardRows() {
+    const key = boardSort.key;
+    const dir = boardSort.dir;
+    return boardRows.slice().sort((a, b) => {
+      const av = boardValue(a, key);
+      const bv = boardValue(b, key);
+      let c = 0;
+      if (typeof av === "number" && typeof bv === "number") c = av - bv;
+      else c = String(av).localeCompare(String(bv));
+      if (c === 0) c = String(a.symbol).localeCompare(String(b.symbol));
+      if (c === 0) c = Number(a.rank) - Number(b.rank);
+      return c * dir;
+    });
+  }
+
+  function renderBoardRows() {
+    const table = $("boardTable");
+    if (!table) return;
+    table.querySelectorAll("th[data-sort]").forEach((th) => {
+      const key = th.getAttribute("data-sort");
+      const active = key === boardSort.key;
+      th.classList.toggle("sort-asc", active && boardSort.dir === 1);
+      th.classList.toggle("sort-desc", active && boardSort.dir === -1);
+      th.setAttribute(
+        "aria-sort",
+        active ? (boardSort.dir === 1 ? "ascending" : "descending") : "none"
+      );
+    });
+    const body = table.querySelector("tbody");
+    body.innerHTML = "";
+    const rows = sortedBoardRows();
+    if (!rows.length) {
+      const tr = document.createElement("tr");
+      tr.className = "board-empty";
+      const td = document.createElement("td");
+      td.colSpan = 6;
+      td.textContent = boardEmptyMessage;
+      tr.appendChild(td);
+      body.appendChild(tr);
+      return;
+    }
+    rows.forEach((row) => {
+      const tr = document.createElement("tr");
+      const pnl = Number(row.total_pnl);
+      const pnlClass = pnl > 0 ? "pnl-up" : pnl < 0 ? "pnl-down" : "";
+      tr.innerHTML =
+        `<td>${esc(row.symbol)}</td>` +
+        `<td>${esc(row.rank)}</td>` +
+        `<td title="${esc(row.rule_id || "")}">${esc(row.summary)}</td>` +
+        `<td class="${pnlClass}">${fmtNum(row.total_pnl, 2)}</td>` +
+        `<td>${esc(row.trade_count)}</td>` +
+        `<td>${esc(row.as_of)}</td>`;
+      tr.addEventListener("click", () => openBoardRow(row));
+      body.appendChild(tr);
+    });
+  }
+
+  function openBoardRow(row) {
+    const item =
+      state.allSymbols.find((s) => s.symbol === row.symbol) ||
+      { symbol: row.symbol, market: row.market || "US" };
+    if ($("timeframe")) $("timeframe").value = "daily";
+    if ($("from") && row.window_start) $("from").value = row.window_start;
+    if ($("to") && row.window_end) $("to").value = row.window_end;
+    if ($("stName")) {
+      state.editingId = null;
+      const label = `${row.symbol} ${row.summary || row.rule_id || ""}`.trim();
+      $("stName").value = label.slice(0, 120);
+      $("stSymbol").value = row.symbol;
+      if ($("stTimeframe")) $("stTimeframe").value = "daily";
+      if (row.rules && $("rulesEditor")) renderRules(row.rules);
+      setTrailPct(row.rules && row.rules.trail_pct != null ? row.rules.trail_pct : "");
+      if ($("btStart") && row.window_start) $("btStart").value = row.window_start;
+      if ($("btEnd") && row.window_end) $("btEnd").value = row.window_end;
+      renderStrategyList();
+    }
+    pickSymbol(item);
+    setHint(
+      "boardStatus",
+      `${row.symbol} rank ${row.rank} on the chart. Strategies form filled for this cell — Save, then Run backtest.`
+    );
+  }
+
+  async function loadBoard() {
+    const table = $("boardTable");
+    const dayEl = $("boardDate");
+    if (!table) return;
+    const q = new URLSearchParams({ market: "US" });
+    const day = dayEl ? dayEl.value : "";
+    if (day) q.set("as_of", day);
+    setHint("boardStatus", "Loading…");
+    try {
+      const data = await apiGet(`/strategy-board?${q}`);
+      if (data.as_of && dayEl && !day) dayEl.value = data.as_of;
+      boardRows = data.rows || [];
+      const version = data.grid_version || "s1-v1";
+      const costs = data.costs_flag ? ` · costs ${data.costs_flag}` : "";
+      const when = data.as_of || "—";
+      const span =
+        data.window_start && data.window_end ? ` · ${data.window_start} → ${data.window_end}` : "";
+      setHint(
+        "boardMeta",
+        `grid ${version} · as of ${when}${span}${costs} · ${data.symbol_count || 0} symbols · top ${data.top_n || 3}`
+      );
+      if (!boardRows.length) {
+        boardEmptyMessage = data.as_of
+          ? `No board rows for ${data.as_of}. After the daily ingest, run python -m dixon.strategy_board.`
+          : "No overnight board yet. After the daily ingest, run python -m dixon.strategy_board.";
+      }
+      renderBoardRows();
+      setHint(
+        "boardStatus",
+        boardRows.length
+          ? "Click a row to load that symbol and fill the strategy form."
+          : boardEmptyMessage
+      );
+    } catch (err) {
+      boardRows = [];
+      boardEmptyMessage = String(err.message || err);
+      renderBoardRows();
+      setHint("boardStatus", boardEmptyMessage, "error");
+    }
+  }
+
+  function bindBoard() {
+    const table = $("boardTable");
+    if (!table || table.dataset.bound === "1") return;
+    table.dataset.bound = "1";
+    table.querySelectorAll("th[data-sort]").forEach((th) => {
+      th.classList.add("sortable");
+      th.addEventListener("click", () => {
+        const key = th.getAttribute("data-sort");
+        if (boardSort.key === key) boardSort.dir = -boardSort.dir;
+        else boardSort = { key: key, dir: key === "total_pnl" ? -1 : 1 };
+        renderBoardRows();
+      });
+    });
+    const btn = $("btnBoard");
+    if (btn && btn.dataset.bound !== "1") {
+      btn.dataset.bound = "1";
+      btn.addEventListener("click", () => {
+        loadBoard().catch((err) => {
+          setHint("boardStatus", String(err.message || err), "error");
+        });
+      });
+    }
+  }
+
+  function showResearchTab(which) {
+    document.querySelectorAll(".research-tabs .tab").forEach((b) => {
+      b.classList.toggle("active", b.getAttribute("data-tab") === which);
+    });
+    ["screener", "board", "strategy"].forEach((name) => {
+      const panel = $("tab-" + name);
+      if (panel) panel.hidden = name !== which;
+    });
+    if (which === "strategy" && state.equityChart) {
+      state.equityChart.applyOptions({ width: $("equity-chart").clientWidth });
+    }
+  }
+
   function bindScreener() {
     const btn = $("btnScreener");
     if (!btn || btn.dataset.bound === "1") return;
@@ -1465,18 +1636,10 @@
 
   function wireResearch() {
     document.querySelectorAll(".research-tabs .tab").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        document.querySelectorAll(".research-tabs .tab").forEach((b) => b.classList.remove("active"));
-        btn.classList.add("active");
-        const which = btn.getAttribute("data-tab");
-        $("tab-screener").hidden = which !== "screener";
-        $("tab-strategy").hidden = which !== "strategy";
-        if (which === "strategy" && state.equityChart) {
-          state.equityChart.applyOptions({ width: $("equity-chart").clientWidth });
-        }
-      });
+      btn.addEventListener("click", () => showResearchTab(btn.getAttribute("data-tab")));
     });
     bindScreener();
+    bindBoard();
     $("rulesEditor").addEventListener("change", (e) => {
       const row = e.target.closest(".cond");
       if (row && e.target.classList.contains("cond-type")) syncCondRow(row, true);
@@ -1617,9 +1780,14 @@
     // Bind and fetch Top 50 before chart setup. A throw or a hung loadChart()
     // must not leave #btnScreener without a listener or skip /screener/top50.
     bindScreener();
+    bindBoard();
     const screenerTask = loadScreener().catch((err) => {
       console.error(err);
       setHint("scrStatus", String(err.message || err), "error");
+    });
+    const boardTask = loadBoard().catch((err) => {
+      console.error(err);
+      setHint("boardStatus", String(err.message || err), "error");
     });
     try {
       wire();
@@ -1636,6 +1804,7 @@
       /* strategies stay empty until the API is reachable */
     }
     await screenerTask;
+    await boardTask;
   }
 
   if (document.readyState === "loading") {
