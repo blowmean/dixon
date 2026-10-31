@@ -149,8 +149,15 @@
             Relative volume is volume ≥ k × SMA(volume, N), default k=1.5 and N=20.
             RSI takes a period and a threshold (Connors entry is RSI(2) ≤ 5).
             Donchian enters when close breaks the prior N-bar high and exits when close breaks the prior M-bar low (classic 20/10).
+            ROC is the percent change versus the close that many bars ago (1 means +1%; default period 7).
+            Trail % is optional: blank leaves it off. 5 means a 5% stop from the peak high (long) or trough low (short) since entry, filled at the next open.
             Knobs are per condition — change them, then Save and run a backtest.
           </p>
+          <div class="research-bar">
+            <label>Trail % from peak
+              <input type="number" id="stTrailPct" step="0.1" min="0.1" max="100" placeholder="off" title="Optional trailing stop in percent points. 5 means exit after a 5% retrace from the peak high (long) or trough low (short) since entry. The fill is the next open. Blank turns the stop off." />
+            </label>
+          </div>
           <div id="rulesEditor"></div>
           <div class="research-bar backtest-bar">
             <label>Backtest from

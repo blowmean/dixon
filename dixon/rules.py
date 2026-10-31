@@ -11,6 +11,15 @@ Condition types:
                                defaults period=2, threshold 5 (lte) or 70 (gte)
   donchian_high                close > max high of the previous `window` bars (default 20)
   donchian_low                 close < min low of the previous `window` bars (default 10)
+  roc_gte, roc_lte             ROC(period) >= or <= threshold, in percent points
+                               ROC = (close / close_period_bars_ago − 1) × 100
+                               defaults period=7, threshold +1 (gte) or −1 (lte)
+
+Optional top-level `trail_pct` (percent points, not a fraction): while a
+position is open, a close that has retraced that percent from the peak high
+(long) or trough low (short) since the fill forces flat. Omit it for no stop.
+The public ROC(7) pattern fills 5, meaning a 5% trail. The stop is not a
+condition, so it still fires when the entry predicate remains true.
 
 Sides are long / flat / short, each an AND or OR of conditions.
 Empty side never fires. Priority when several sides fire on the same bar:
@@ -21,6 +30,9 @@ Empty side never fires. Priority when several sides fire on the same bar:
   else hold the current side.
 
 A flat exit therefore only acts when the long and short groups are false.
+`trail_pct` is applied after that priority: it forces flat only when the
+decision would keep the held side (still-true entry, or hold). An opposite
+side on the same close still reverses.
 Donchian high and low breaks are mutually exclusive for overlapping lookbacks,
 so a 20-bar high entry and a 10-bar low exit can share one bar's decision.
 """
@@ -40,6 +52,14 @@ RSI_LTE_THRESHOLD_DEFAULT = 5.0
 RSI_GTE_THRESHOLD_DEFAULT = 70.0
 DONCHIAN_HIGH_DEFAULT = 20
 DONCHIAN_LOW_DEFAULT = 10
+ROC_PERIOD_DEFAULT = 7
+ROC_GTE_THRESHOLD_DEFAULT = 1.0
+ROC_LTE_THRESHOLD_DEFAULT = -1.0
+# Filled by the ROC(7) public pattern. Omitted `trail_pct` means no stop.
+K2_TRAIL_PCT_DEFAULT = 5.0
+TRAIL_PCT_MAX = 100.0
+ROC_THRESHOLD_MIN = -100.0
+ROC_THRESHOLD_MAX = 10000.0
 
 _LOOKBACK_MIN = 1
 _LOOKBACK_MAX = 500
@@ -56,6 +76,8 @@ _TYPES = _WINDOWED | {
     "rsi_gte",
     "donchian_high",
     "donchian_low",
+    "roc_gte",
+    "roc_lte",
 }
 _SIDES = ("long", "flat", "short")
 
@@ -191,9 +213,44 @@ def validate_rules(rules: Any) -> dict[str, Any]:
                     _LOOKBACK_MIN,
                     _LOOKBACK_MAX,
                 )
+            elif ctype in {"roc_gte", "roc_lte"}:
+                default_threshold = (
+                    ROC_GTE_THRESHOLD_DEFAULT if ctype == "roc_gte" else ROC_LTE_THRESHOLD_DEFAULT
+                )
+                item["period"] = _as_int_in(
+                    _present(cond, "period", ROC_PERIOD_DEFAULT),
+                    f"{side} {ctype} period",
+                    _LOOKBACK_MIN,
+                    _LOOKBACK_MAX,
+                )
+                item["threshold"] = _as_float_in(
+                    _present(cond, "threshold", default_threshold),
+                    f"{side} {ctype} threshold",
+                    ROC_THRESHOLD_MIN,
+                    ROC_THRESHOLD_MAX,
+                )
             conds.append(item)
         out[side] = {"logic": logic, "conditions": conds}
+    trail = _canonical_trail(rules)
+    if trail is not None:
+        out["trail_pct"] = trail
     return out
+
+
+def _canonical_trail(rules: dict[str, Any]) -> float | None:
+    """Percent-point trail, or None when the stop is off.
+
+    Missing and null both mean off, so older rules stay byte-for-byte canonical.
+    """
+    if "trail_pct" not in rules or rules["trail_pct"] is None:
+        return None
+    return _as_float_in(
+        rules["trail_pct"],
+        "trail_pct",
+        0.0,
+        TRAIL_PCT_MAX,
+        lo_exclusive=True,
+    )
 
 
 def windows_used(rules: dict[str, Any]) -> list[int]:
@@ -216,6 +273,7 @@ def signal_requirements(rules: dict[str, Any]) -> dict[str, Any]:
     volume: set[int] = set()
     high: set[int] = set()
     low: set[int] = set()
+    roc: set[int] = set()
     needs_spike = False
     for side in _SIDES:
         for cond in rules.get(side, {}).get("conditions", []):
@@ -228,6 +286,8 @@ def signal_requirements(rules: dict[str, Any]) -> dict[str, Any]:
                 high.add(int(cond["window"]))
             elif ctype == "donchian_low":
                 low.add(int(cond["window"]))
+            elif ctype in {"roc_gte", "roc_lte"}:
+                roc.add(int(cond["period"]))
             elif ctype == "top50_spike":
                 needs_spike = True
     return {
@@ -235,6 +295,7 @@ def signal_requirements(rules: dict[str, Any]) -> dict[str, Any]:
         "volume_windows": sorted(volume),
         "donchian_high_windows": sorted(high),
         "donchian_low_windows": sorted(low),
+        "roc_periods": sorted(roc),
         "needs_spike": needs_spike,
     }
 
@@ -252,6 +313,7 @@ class SignalView:
     rsi: dict[int, float | None] = field(default_factory=dict)
     prior_high: dict[int, float | None] = field(default_factory=dict)
     prior_low: dict[int, float | None] = field(default_factory=dict)
+    roc: dict[int, float | None] = field(default_factory=dict)
 
 
 def condition_true(cond: dict[str, Any], view: SignalView) -> bool:
@@ -299,7 +361,47 @@ def condition_true(cond: dict[str, Any], view: SignalView) -> bool:
     if ctype == "donchian_low":
         level = view.prior_low.get(cond["window"])
         return level is not None and view.close < level
+    if ctype in {"roc_gte", "roc_lte"}:
+        value = view.roc.get(int(cond["period"]))
+        if value is None:
+            return False
+        if ctype == "roc_gte":
+            return value >= float(cond["threshold"])
+        return value <= float(cond["threshold"])
     return False
+
+
+def updated_extreme(side: str, extreme: float, high: float, low: float) -> float:
+    """Peak high (long) or trough low (short), ignoring non-finite prints."""
+    if side == "long":
+        if _finite(high) and high > extreme:
+            return float(high)
+        return float(extreme)
+    if _finite(low) and low < extreme:
+        return float(low)
+    return float(extreme)
+
+
+def trail_triggered(side: str, extreme: float, close: float, trail_pct: float) -> bool:
+    """True when `close` has retraced `trail_pct` percent from `extreme`.
+
+    `trail_pct` is percent points (5 means 5%). Longs trigger at or below
+    peak × (1 − pct/100). Shorts trigger at or above trough × (1 + pct/100).
+    A one-ulp dust band keeps a close that lands on the limit from missing it.
+    """
+    if not _finite(extreme) or not _finite(close) or extreme <= 0 or trail_pct <= 0:
+        return False
+    dist = float(trail_pct) / 100.0
+    band = 1e-9 * max(1.0, abs(extreme))
+    if side == "long":
+        return close <= extreme * (1.0 - dist) + band
+    if side == "short":
+        return close >= extreme * (1.0 + dist) - band
+    return False
+
+
+def _finite(value: float) -> bool:
+    return isinstance(value, (int, float)) and value == value and abs(value) != float("inf")
 
 
 def _group_true(group: dict[str, Any], view: SignalView) -> bool:

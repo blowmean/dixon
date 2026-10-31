@@ -172,6 +172,34 @@ Prior channel, **excluding** the signal bar (a close cannot exceed that bar's ow
 - `donchian_low`: \(C_t < \mathrm{Low}^{(M)}_t\). Default \(M = 10\).
 - Warm-up → false. No ATR stop is applied.
 
+### Rate of change — `roc_gte` / `roc_lte`
+
+Percent points versus the close `period` bars ago (the signal bar is included; the reference bar is not):
+
+\[
+\mathrm{ROC}(\mathrm{period})_t = \left(\frac{C_t}{C_{t-\mathrm{period}}} - 1\right) \times 100
+\]
+
+- `roc_gte`: \(\mathrm{ROC}(\mathrm{period})_t \ge \mathrm{threshold}\). Defaults: period 7, threshold **+1** (+1%).
+- `roc_lte`: \(\mathrm{ROC}(\mathrm{period})_t \le \mathrm{threshold}\). Defaults: period 7, threshold **−1** (−1%).
+- Threshold units are percent points. `1` means +1%, not 100% and not the fraction `0.01`.
+- Period is an integer from 1 to 500 (same lookback span as relative volume and Donchian, not the fixed MA menu). Threshold is −100 to 10000.
+- Warm-up, or a non-positive reference close → false.
+- These are ordinary side predicates. `long` AND `roc_gte` with `rel_volume`, `rsi_lte` / `rsi_gte`, Donchian, or an MA rule requires every condition.
+
+A K2-style entry is `roc_gte` period 7 threshold 1 on `long`, and `roc_lte` period 7 threshold −1 on `short`. The band between −1% and +1% does not fire, so an open position is held until a trail, a flat rule, or the opposite side.
+
+### Trailing stop — `trail_pct`
+
+Optional number on the rules object, not a condition. Percent points: `5` means 5%. Omit or null to disable.
+
+While a position is open, track the extreme since the fill (the entry price, then each bar's high or low):
+
+- Long: peak \(P_t = \max(P_{t-1}, H_t)\). Exit signal when \(C_t \le P_t \times (1 - \mathrm{trail\_pct}/100)\).
+- Short: trough \(T_t = \min(T_{t-1}, L_t)\). Exit signal when \(C_t \ge T_t \times (1 + \mathrm{trail\_pct}/100)\).
+
+The breach forces flat even when the held side's entry predicate is still true. An opposite-side signal on that same close reverses instead. The fill is the next stored bar's open (`exit_reason` `trail`); the exit price is that open, not the stop level. A breach on the last in-range bar does not flatten. The ROC(7) public pattern uses `trail_pct` 5. US/HK cost defaults are unchanged.
+
 ---
 
 ## QA tips

@@ -56,6 +56,19 @@ def prior_low(low: pd.Series, window: int) -> pd.Series:
     return pd.to_numeric(low, errors="coerce").shift(1).rolling(window, min_periods=window).min()
 
 
+def rate_of_change(close: pd.Series, period: int) -> pd.Series:
+    """ROC in percent points: (close / close_n_bars_ago − 1) × 100.
+
+    The signal bar is the current close. The reference close is `period` bars
+    earlier, so the first `period` values are NaN. A non-positive reference
+    close is NaN (the ratio is undefined).
+    """
+    px = pd.to_numeric(close, errors="coerce")
+    prev = px.shift(period)
+    roc = (px / prev - 1.0) * 100.0
+    return roc.mask(prev <= 0)
+
+
 def series_by_date(dates: pd.Series, values: pd.Series) -> dict:
     """Map each bar date to a finite value. Warm-up NaNs are omitted."""
     out: dict = {}

@@ -138,8 +138,10 @@ Strategy conditions, same CRUD and next-open backtest. Knobs live on each condit
 | `rel_volume` | k=1.5, N=20 | volume ≥ k × SMA(volume, N), average includes the signal bar |
 | `rsi_lte` / `rsi_gte` | period 2, threshold 5 / 70 | Wilder RSI(period) compared with the threshold |
 | `donchian_high` / `donchian_low` | N=20 / M=10 | close > prior N-bar high, or close < prior M-bar low |
+| `roc_gte` / `roc_lte` | period 7, threshold +1% / −1% | ROC(period) in percent points versus the close `period` bars ago. Same single-name AND/OR stack as the rows above |
+| `trail_pct` | off unless set; ROC pattern uses 5 | trailing stop, percent from the peak high (long) or trough low (short) since entry. Close-confirmed; fill is still the next open |
 
-Not in this slice: Minervini RS rank, cross-sectional momentum, a shared multi-name book, ATR stops.
+Not in this slice: Minervini RS rank, cross-sectional momentum, a shared multi-name book, ATR stops, EMA 9/21 entries, a batch leaderboard.
 
 ## Next steps
 

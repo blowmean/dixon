@@ -441,7 +441,7 @@ def test_api_persists_predicate_knobs_and_backtests_them():
 def test_research_panel_exposes_predicate_knobs_and_presets():
     script = (STATIC / "app.js").read_text()
     html = (STATIC / "index.html").read_text()
-    for token in ("rel_volume", "rsi_lte", "rsi_gte", "donchian_high", "donchian_low"):
+    for token in ("rel_volume", "rsi_lte", "rsi_gte", "donchian_high", "donchian_low", "roc_gte", "roc_lte"):
         assert token in script
     assert "PREDICATE_DEFAULTS" in script
     assert "k: 1.5" in script and "window: 20" in script
