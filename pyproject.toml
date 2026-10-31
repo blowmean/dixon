@@ -29,6 +29,7 @@ dixon-ingest = "dixon.ingest:main"
 dixon-rollup = "dixon.rollup:main"
 dixon-indicators = "dixon.compute_indicators:main"
 dixon-refresh-universe = "dixon.refresh_universe:main"
+dixon-strategy-board = "dixon.strategy_board:main"
 
 [tool.setuptools.packages.find]
 include = ["dixon*"]

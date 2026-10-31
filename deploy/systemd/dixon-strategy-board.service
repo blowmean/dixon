@@ -1,0 +1,15 @@
+# User unit for paul on darkstar. Not installed by the repo.
+# Copy to ~/.config/systemd/user/dixon-strategy-board.service
+#
+# Prefer the drop-in in dixon-daily.service.d/ so the board runs only after
+# a successful daily ingest. This unit is the standalone oneshot that timer
+# and ExecStartPost both call.
+
+[Unit]
+Description=Dixon US Top-50 overnight strategy board (grid s1-v1)
+After=dixon-daily.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/home/paul/project-dixon
+ExecStart=/home/paul/project-dixon/scripts/strategy_board.sh

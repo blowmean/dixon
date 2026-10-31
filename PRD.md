@@ -142,7 +142,11 @@ Strategy conditions, same CRUD and next-open backtest. Knobs live on each condit
 | `ema_gt_ema` / `ema_lt_ema` | fast 9, slow 21 | EMA(fast) above or below EMA(slow). Stack state, not a one-bar cross. Spans are 1–500 and are not the SMA menu. Volume confirm is a separate `rel_volume` on the same side; the public pattern uses k=1.5, N=20 |
 | `trail_pct` | off unless set; ROC pattern uses 5 | trailing stop, percent from the peak high (long) or trough low (short) since entry. Close-confirmed; fill is still the next open. The EMA pattern does not set it |
 
-Not in this slice: Minervini RS rank, cross-sectional momentum, a shared multi-name book, ATR stops, a batch leaderboard. HK/US v1.2 cost defaults are unchanged.
+Not in this slice: Minervini RS rank, cross-sectional momentum, a shared multi-name book, ATR stops, walk-forward holdout, HK on the overnight board. HK/US v1.2 cost defaults are unchanged.
+
+### Overnight US Top-50 board (grid `s1-v1`)
+
+Separate from the single-name strategy editor. A nightly job (`python -m dixon.strategy_board`, after the daily EOD ingest) scores the **US Top-50** only. Each name keeps its **top 3** cells by rolling 12-month total P&L (higher P&L, then fewer closed trades, then `rule_id`). Costs are US v1.2 defaults on every cell. Families are searched on their own, plus the public presets as anchors — not a cross-family cartesian. Results land in `strategy_board` and `GET /strategy-board`. The Board tab in `/ui/` sorts them. Re-running a night replaces that `as_of` + `grid_version` slice. Full rolling-1y in-sample is intentional; there is no holdout in this grid.
 
 ## Next steps
 

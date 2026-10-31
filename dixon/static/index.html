@@ -80,6 +80,7 @@
   <section id="research">
     <div class="research-tabs">
       <button type="button" class="tab active" data-tab="screener">Top 50</button>
+      <button type="button" class="tab" data-tab="board">Board</button>
       <button type="button" class="tab" data-tab="strategy">Strategies</button>
     </div>
 
@@ -107,6 +108,32 @@
               <th>Turnover</th>
               <th>Day gain</th>
               <th>Spike</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div id="tab-board" class="tab-panel" hidden>
+      <div class="research-bar">
+        <label>As of
+          <input type="date" id="boardDate" />
+        </label>
+        <button id="btnBoard" type="button">Load board</button>
+        <span id="boardMeta" class="hint"></span>
+      </div>
+      <p id="boardStatus" class="hint board-note"></p>
+      <div class="table-wrap">
+        <table id="boardTable">
+          <thead>
+            <tr>
+              <th data-sort="symbol" aria-sort="ascending">Symbol</th>
+              <th data-sort="rank" aria-sort="none">Rank</th>
+              <th data-sort="summary" aria-sort="none">Strategy</th>
+              <th data-sort="total_pnl" aria-sort="none">1y P&amp;L</th>
+              <th data-sort="trade_count" aria-sort="none">Trades</th>
+              <th data-sort="as_of" aria-sort="none">As of</th>
             </tr>
           </thead>
           <tbody></tbody>
@@ -208,7 +235,9 @@
   <footer>
     SMA menu (5 / 9 / 20 / 30 / 50 / 100 / 250) and the other overlays are cached in
     <code>indicator_cache</code> on the selected timeframe (D/W/M).
-    Top-50 turnover pools are separate for HK and US. Strategies are private to the Access email
+    Top-50 turnover pools are separate for HK and US.
+    The Board tab is the overnight US Top-50 ranking (grid s1-v1): top 3 strategies per name by rolling 1-year total P&amp;L.
+    Strategies are private to the Access email
     (or <code>DIXON_DEFAULT_OWNER</code> on localhost / API key).
     Win rate target &gt; 50% and max drawdown target 10% are display-only.
   </footer>
