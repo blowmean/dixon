@@ -13,6 +13,12 @@ Accounting:
     entry notional stays in the gross-exposure sum so later tickets still see it.
   * Open positions are marked at each session close. The test does not invent
     a flatten on the end date; `open_position` carries unrealized P&L.
+  * Optional `rules.trail_pct` (percent points) is a close-confirmed stop.
+    The extreme is the peak high (long) or trough low (short) since the fill,
+    including the current bar. A breach forces flat even when that side's
+    entry predicate is still true, and the fill is still the next open
+    (`exit_reason` `trail`). An opposite-side signal on the same close
+    reverses instead. No trail key means no stop.
   * Dividends are ignored. P&L is price change minus the costs above.
 """
 
@@ -31,11 +37,20 @@ from dixon.compute_indicators import (
     load_ohlc,
     prior_high,
     prior_low,
+    rate_of_change,
     series_by_date,
     volume_sma,
 )
 from dixon.costs import CostModel, commission, cost_model_from_overrides, slip_per_share
-from dixon.rules import SignalView, signal_requirements, target_side, validate_rules, windows_used
+from dixon.rules import (
+    SignalView,
+    signal_requirements,
+    target_side,
+    trail_triggered,
+    updated_extreme,
+    validate_rules,
+    windows_used,
+)
 from dixon.screener import spike_dates, to_date
 
 MAX_CONCURRENT = 5
@@ -52,6 +67,7 @@ class Position:
     entry_date: date
     entry_commission: float
     entry_slippage: float
+    extreme: float
 
     @property
     def notional(self) -> float:
@@ -175,6 +191,7 @@ class Portfolio:
             entry_date=when,
             entry_commission=comm,
             entry_slippage=slip,
+            extreme=price,
         )
         return True
 
@@ -185,12 +202,13 @@ class Portfolio:
         price: float,
         when: date,
         marks: dict[str, float],
+        reason: str = "signal",
     ) -> None:
         current = self.side_of(symbol)
         if current == target:
             return
         if current != "flat":
-            self.close_position(symbol, price, when, "signal")
+            self.close_position(symbol, price, when, reason)
         if target in {"long", "short"}:
             # Revalue after the close. The closed name is flat; other names use `marks`.
             self.try_open(symbol, target, price, when, marks)
@@ -275,6 +293,11 @@ def run_backtest(
         w: series_by_date(bars["bar_date"], prior_low(bars["low"], w))
         for w in reqs["donchian_low_windows"]
     } if not bars.empty else {}
+    roc_maps = {
+        period: series_by_date(bars["bar_date"], rate_of_change(bars["close"], period))
+        for period in reqs["roc_periods"]
+    } if not bars.empty else {}
+    trail_pct = rules.get("trail_pct")
 
     spikes: set[date] = set()
     if reqs["needs_spike"]:
@@ -296,6 +319,7 @@ def run_backtest(
         mas_prev = {w: None for w in windows}
 
     pending: str | None = None
+    pending_reason = "signal"
     for i, rec in enumerate(records):
         bar_date = to_date(rec["bar_date"])
         open_px = float(rec["open"])
@@ -304,7 +328,7 @@ def run_backtest(
             marks = {symbol: open_px}
             for sym, pos in book.positions.items():
                 marks.setdefault(sym, pos.entry_price)
-            book.set_target(symbol, pending, open_px, bar_date, marks)
+            book.set_target(symbol, pending, open_px, bar_date, marks, pending_reason)
 
         mark_map = {symbol: close_px}
         for sym, pos in book.positions.items():
@@ -337,9 +361,20 @@ def run_backtest(
                     prior_low={
                         w: low_maps[w].get(bar_date) for w in reqs["donchian_low_windows"]
                     },
+                    roc={p: roc_maps[p].get(bar_date) for p in reqs["roc_periods"]},
                 ),
                 book.side_of(symbol),
             )
+            reason = "signal"
+            held = book.positions.get(symbol)
+            if held is not None and trail_pct is not None:
+                held.extreme = updated_extreme(
+                    held.side, held.extreme, float(rec["high"]), float(rec["low"])
+                )
+                if trail_triggered(held.side, held.extreme, close_px, trail_pct) and pending == held.side:
+                    pending = "flat"
+                    reason = "trail"
+            pending_reason = reason
         else:
             pending = None
         mas_prev = mas

@@ -61,6 +61,8 @@
     ["rsi_gte", "RSI ≥ threshold"],
     ["donchian_high", "Close > prior N high"],
     ["donchian_low", "Close < prior M low"],
+    ["roc_gte", "ROC ≥ threshold"],
+    ["roc_lte", "ROC ≤ threshold"],
   ];
   const PREDICATE_DEFAULTS = {
     rel_volume: { k: 1.5, window: 20 },
@@ -68,6 +70,8 @@
     rsi_gte: { period: 2, threshold: 70 },
     donchian_high: { window: 20 },
     donchian_low: { window: 10 },
+    roc_gte: { period: 7, threshold: 1 },
+    roc_lte: { period: 7, threshold: -1 },
   };
 
   function $(id) {
@@ -909,6 +913,10 @@
     return type === "donchian_high" || type === "donchian_low";
   }
 
+  function isRocType(type) {
+    return type === "roc_gte" || type === "roc_lte";
+  }
+
   function formatStack(cond) {
     const op = (cond.direction || "up") === "down" ? "<" : ">";
     return (cond.windows || []).join(op);
@@ -961,14 +969,17 @@
         const winOpts = MA_MENU.map(
           (w) => `<option value="${w}"${Number(cond.window) === w ? " selected" : ""}>${w}</option>`
         ).join("");
-        const lookback = isRsiType(cond.type) ? cond.period : (isDonchianType(cond.type) || cond.type === "rel_volume" ? cond.window : "");
+        const lookback = isRsiType(cond.type) || isRocType(cond.type)
+          ? cond.period
+          : (isDonchianType(cond.type) || cond.type === "rel_volume" ? cond.window : "");
+        const showThreshold = isRsiType(cond.type) || isRocType(cond.type);
         row.innerHTML =
           `<select class="cond-type">${typeOpts}</select>` +
           `<select class="cond-window">${winOpts}</select>` +
           `<input class="cond-stack" type="text" placeholder="5>20>50" value="${esc(cond.type === "ma_stack" ? formatStack(cond) : "")}" />` +
           `<input class="cond-k" type="number" step="0.1" min="0.1" placeholder="k" title="Volume multiple k" value="${esc(cond.type === "rel_volume" ? cond.k : "")}" />` +
-          `<input class="cond-n" type="number" step="1" min="1" placeholder="N" title="Lookback N or RSI period" value="${esc(lookback == null ? "" : lookback)}" />` +
-          `<input class="cond-threshold" type="number" step="0.1" min="0" max="100" placeholder="threshold" title="RSI threshold" value="${esc(isRsiType(cond.type) ? cond.threshold : "")}" />` +
+          `<input class="cond-n" type="number" step="1" min="1" placeholder="N" title="Lookback N, RSI period, or ROC period" value="${esc(lookback == null ? "" : lookback)}" />` +
+          `<input class="cond-threshold" type="number" step="0.1" placeholder="threshold" title="RSI or ROC threshold" value="${esc(showThreshold ? cond.threshold : "")}" />` +
           `<button type="button" class="secondary cond-del">Remove</button>`;
         box.appendChild(row);
         syncCondRow(row, false);
@@ -982,14 +993,29 @@
     const isRel = type === "rel_volume";
     const isRsi = isRsiType(type);
     const isDon = isDonchianType(type);
+    const isRoc = isRocType(type);
     row.querySelector(".cond-window").hidden = !conditionNeedsWindow(type);
     row.querySelector(".cond-stack").hidden = type !== "ma_stack";
     row.querySelector(".cond-k").hidden = !isRel;
-    row.querySelector(".cond-n").hidden = !(isRel || isRsi || isDon);
-    row.querySelector(".cond-threshold").hidden = !isRsi;
+    row.querySelector(".cond-n").hidden = !(isRel || isRsi || isDon || isRoc);
+    const threshold = row.querySelector(".cond-threshold");
+    threshold.hidden = !(isRsi || isRoc);
+    if (isRoc) {
+      threshold.min = "-100";
+      threshold.max = "10000";
+      threshold.step = "0.1";
+      threshold.placeholder = "±%";
+      threshold.title = "ROC threshold in percent points. 1 means +1%.";
+    } else {
+      threshold.min = "0";
+      threshold.max = "100";
+      threshold.step = "0.1";
+      threshold.placeholder = "threshold";
+      threshold.title = "RSI threshold";
+    }
     const n = row.querySelector(".cond-n");
     if (isRel) n.placeholder = "N";
-    else if (isRsi) n.placeholder = "period";
+    else if (isRsi || isRoc) n.placeholder = "period";
     else if (type === "donchian_high") n.placeholder = "N";
     else if (type === "donchian_low") n.placeholder = "M";
     if (!fillDefaults) return;
@@ -1042,13 +1068,37 @@
         } else if (isDonchianType(type)) {
           const label = type === "donchian_high" ? "Donchian N" : "Donchian M";
           conditions.push({ type, window: readRequiredInt(row.querySelector(".cond-n"), label) });
+        } else if (isRocType(type)) {
+          conditions.push({
+            type,
+            period: readRequiredInt(row.querySelector(".cond-n"), "ROC period"),
+            threshold: readRequiredNumber(row.querySelector(".cond-threshold"), "ROC threshold"),
+          });
         } else {
           conditions.push({ type, window: Number(row.querySelector(".cond-window").value) });
         }
       });
       rules[side] = { logic, conditions };
     });
+    const trail = readTrailPct();
+    if (trail != null) rules.trail_pct = trail;
     return rules;
+  }
+
+  function readTrailPct() {
+    const input = $("stTrailPct");
+    if (!input) return null;
+    const raw = String(input.value == null ? "" : input.value).trim();
+    if (raw === "") return null;
+    const n = Number(raw);
+    if (!Number.isFinite(n)) throw new Error("Trail % must be a number");
+    return n;
+  }
+
+  function setTrailPct(value) {
+    const input = $("stTrailPct");
+    if (!input) return;
+    input.value = value == null || value === "" ? "" : String(value);
   }
 
   // Street presets. `description` is the hover/focus tooltip; `rules` is what
@@ -1100,6 +1150,19 @@
         long: { logic: "AND", conditions: [{ type: "donchian_high", window: 20 }] },
         flat: { logic: "OR", conditions: [{ type: "donchian_low", window: 10 }] },
         short: { logic: "AND", conditions: [] },
+      },
+    },
+    {
+      id: "roc",
+      label: "ROC(7) ±1%",
+      description:
+        "Momentum. Long when ROC(7) is at least +1%. Short when ROC(7) is −1% or lower. A 5% trailing stop exits after a 5% move off the peak high (long) or trough low (short) since entry. The stop fills at the next open. Add a relative-volume, RSI, Donchian, or MA condition on the same side to require it as well.",
+      filled: "ROC(7) ±1% filled with a 5% trail. Save to keep it.",
+      trail_pct: 5,
+      rules: {
+        long: { logic: "AND", conditions: [{ type: "roc_gte", period: 7, threshold: 1 }] },
+        flat: { logic: "AND", conditions: [] },
+        short: { logic: "AND", conditions: [{ type: "roc_lte", period: 7, threshold: -1 }] },
       },
     },
   ];
@@ -1240,6 +1303,7 @@
     $("stSymbol").value = st.symbol;
     $("stTimeframe").value = st.timeframe;
     renderRules(st.rules);
+    setTrailPct(st.rules && st.rules.trail_pct != null ? st.rules.trail_pct : "");
     renderStrategyList();
     setHint("stStatus", `Editing ${st.name}`);
   }
@@ -1250,6 +1314,7 @@
     $("stSymbol").value = $("symbol").value || "";
     $("stTimeframe").value = $("timeframe").value || "daily";
     renderRules(emptyRules());
+    setTrailPct("");
     renderStrategyList();
     setHint("stStatus", "New strategy");
   }
@@ -1298,7 +1363,7 @@
       tr.innerHTML =
         `<td>${esc(t.side)}</td>` +
         `<td>${esc(t.entry_date)}</td>` +
-        `<td>${esc(t.exit_date)}</td>` +
+        `<td>${esc(t.exit_reason && t.exit_reason !== "signal" ? t.exit_date + " · " + t.exit_reason : t.exit_date)}</td>` +
         `<td>${fmtNum(t.shares, 4)}</td>` +
         `<td>${fmtNum(t.entry_price, 4)}</td>` +
         `<td>${fmtNum(t.exit_price, 4)}</td>` +
@@ -1379,6 +1444,7 @@
         if (!which) return;
         renderRules(presetRules(which));
         const pattern = patternById(which);
+        setTrailPct(pattern && pattern.trail_pct != null ? pattern.trail_pct : "");
         setHint("stStatus", (pattern && pattern.filled) || "Preset filled");
       });
     }
