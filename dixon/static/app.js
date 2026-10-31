@@ -63,6 +63,8 @@
     ["donchian_low", "Close < prior M low"],
     ["roc_gte", "ROC ≥ threshold"],
     ["roc_lte", "ROC ≤ threshold"],
+    ["ema_gt_ema", "EMA fast > slow"],
+    ["ema_lt_ema", "EMA fast < slow"],
   ];
   const PREDICATE_DEFAULTS = {
     rel_volume: { k: 1.5, window: 20 },
@@ -72,6 +74,8 @@
     donchian_low: { window: 10 },
     roc_gte: { period: 7, threshold: 1 },
     roc_lte: { period: 7, threshold: -1 },
+    ema_gt_ema: { fast: 9, slow: 21 },
+    ema_lt_ema: { fast: 9, slow: 21 },
   };
 
   function $(id) {
@@ -917,6 +921,10 @@
     return type === "roc_gte" || type === "roc_lte";
   }
 
+  function isEmaType(type) {
+    return type === "ema_gt_ema" || type === "ema_lt_ema";
+  }
+
   function formatStack(cond) {
     const op = (cond.direction || "up") === "down" ? "<" : ">";
     return (cond.windows || []).join(op);
@@ -969,9 +977,11 @@
         const winOpts = MA_MENU.map(
           (w) => `<option value="${w}"${Number(cond.window) === w ? " selected" : ""}>${w}</option>`
         ).join("");
-        const lookback = isRsiType(cond.type) || isRocType(cond.type)
-          ? cond.period
-          : (isDonchianType(cond.type) || cond.type === "rel_volume" ? cond.window : "");
+        const lookback = isEmaType(cond.type)
+          ? cond.fast
+          : (isRsiType(cond.type) || isRocType(cond.type)
+            ? cond.period
+            : (isDonchianType(cond.type) || cond.type === "rel_volume" ? cond.window : ""));
         const showThreshold = isRsiType(cond.type) || isRocType(cond.type);
         row.innerHTML =
           `<select class="cond-type">${typeOpts}</select>` +
@@ -979,6 +989,7 @@
           `<input class="cond-stack" type="text" placeholder="5>20>50" value="${esc(cond.type === "ma_stack" ? formatStack(cond) : "")}" />` +
           `<input class="cond-k" type="number" step="0.1" min="0.1" placeholder="k" title="Volume multiple k" value="${esc(cond.type === "rel_volume" ? cond.k : "")}" />` +
           `<input class="cond-n" type="number" step="1" min="1" placeholder="N" title="Lookback N, RSI period, or ROC period" value="${esc(lookback == null ? "" : lookback)}" />` +
+          `<input class="cond-slow" type="number" step="1" min="1" max="500" placeholder="slow" title="Slow EMA span" value="${esc(isEmaType(cond.type) && cond.slow != null ? cond.slow : "")}" />` +
           `<input class="cond-threshold" type="number" step="0.1" placeholder="threshold" title="RSI or ROC threshold" value="${esc(showThreshold ? cond.threshold : "")}" />` +
           `<button type="button" class="secondary cond-del">Remove</button>`;
         box.appendChild(row);
@@ -994,10 +1005,12 @@
     const isRsi = isRsiType(type);
     const isDon = isDonchianType(type);
     const isRoc = isRocType(type);
+    const isEma = isEmaType(type);
     row.querySelector(".cond-window").hidden = !conditionNeedsWindow(type);
     row.querySelector(".cond-stack").hidden = type !== "ma_stack";
     row.querySelector(".cond-k").hidden = !isRel;
-    row.querySelector(".cond-n").hidden = !(isRel || isRsi || isDon || isRoc);
+    row.querySelector(".cond-n").hidden = !(isRel || isRsi || isDon || isRoc || isEma);
+    row.querySelector(".cond-slow").hidden = !isEma;
     const threshold = row.querySelector(".cond-threshold");
     threshold.hidden = !(isRsi || isRoc);
     if (isRoc) {
@@ -1018,6 +1031,8 @@
     else if (isRsi || isRoc) n.placeholder = "period";
     else if (type === "donchian_high") n.placeholder = "N";
     else if (type === "donchian_low") n.placeholder = "M";
+    else if (isEma) n.placeholder = "fast";
+    n.title = isEma ? "Fast EMA span" : "Lookback N, RSI period, or ROC period";
     if (!fillDefaults) return;
     const defaults = PREDICATE_DEFAULTS[type];
     if (!defaults) return;
@@ -1025,6 +1040,8 @@
     if (defaults.window != null) n.value = defaults.window;
     if (defaults.period != null) n.value = defaults.period;
     if (defaults.threshold != null) row.querySelector(".cond-threshold").value = defaults.threshold;
+    if (defaults.fast != null) n.value = defaults.fast;
+    if (defaults.slow != null) row.querySelector(".cond-slow").value = defaults.slow;
   }
 
   function readRequiredNumber(input, label) {
@@ -1073,6 +1090,12 @@
             type,
             period: readRequiredInt(row.querySelector(".cond-n"), "ROC period"),
             threshold: readRequiredNumber(row.querySelector(".cond-threshold"), "ROC threshold"),
+          });
+        } else if (isEmaType(type)) {
+          conditions.push({
+            type,
+            fast: readRequiredInt(row.querySelector(".cond-n"), "EMA fast span"),
+            slow: readRequiredInt(row.querySelector(".cond-slow"), "EMA slow span"),
           });
         } else {
           conditions.push({ type, window: Number(row.querySelector(".cond-window").value) });
@@ -1163,6 +1186,30 @@
         long: { logic: "AND", conditions: [{ type: "roc_gte", period: 7, threshold: 1 }] },
         flat: { logic: "AND", conditions: [] },
         short: { logic: "AND", conditions: [{ type: "roc_lte", period: 7, threshold: -1 }] },
+      },
+    },
+    {
+      id: "ema",
+      label: "EMA 9/21 + volume",
+      description:
+        "Trend stack. Long when EMA(9) is above EMA(21) and volume is at least 1.5× its 20-bar average. Short when EMA(9) is below EMA(21) with that same volume confirm. The position is held on a quiet bar, including after the stack flips, until volume confirms the other side. Spans are not the SMA menu. Add ROC, RSI, Donchian, or an MA condition on the same side to require it as well.",
+      filled: "EMA 9/21 filled with volume ≥ 1.5× SMA(volume, 20). Save to keep it.",
+      rules: {
+        long: {
+          logic: "AND",
+          conditions: [
+            { type: "ema_gt_ema", fast: 9, slow: 21 },
+            { type: "rel_volume", k: 1.5, window: 20 },
+          ],
+        },
+        flat: { logic: "AND", conditions: [] },
+        short: {
+          logic: "AND",
+          conditions: [
+            { type: "ema_lt_ema", fast: 9, slow: 21 },
+            { type: "rel_volume", k: 1.5, window: 20 },
+          ],
+        },
       },
     },
   ];

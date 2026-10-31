@@ -241,6 +241,7 @@ tbody tr:hover { background: var(--hover); }
 .cond button { padding: 4px 8px; }
 .cond .cond-k,
 .cond .cond-n,
+.cond .cond-slow,
 .cond .cond-threshold { width: 5.4rem; min-width: 4.6rem; }
 .predicate-note { margin: 0 0 8px; line-height: 1.45; max-width: 62rem; }
 .preset-desc-root {

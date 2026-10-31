@@ -14,6 +14,13 @@ Condition types:
   roc_gte, roc_lte             ROC(period) >= or <= threshold, in percent points
                                ROC = (close / close_period_bars_ago − 1) × 100
                                defaults period=7, threshold +1 (gte) or −1 (lte)
+  ema_gt_ema, ema_lt_ema       EMA(fast) > EMA(slow), or EMA(fast) < EMA(slow)
+                               defaults fast=9, slow=21. Spans are any integer
+                               from 1 to 500, not the SMA menu (21 is allowed).
+                               True on every bar the inequality holds (the stack),
+                               not only the bar it crosses. Equal values and
+                               warm-up are false. Volume is not inside this
+                               predicate: AND a rel_volume condition to confirm.
 
 Optional top-level `trail_pct` (percent points, not a fraction): while a
 position is open, a close that has retraced that percent from the peak high
@@ -55,6 +62,10 @@ DONCHIAN_LOW_DEFAULT = 10
 ROC_PERIOD_DEFAULT = 7
 ROC_GTE_THRESHOLD_DEFAULT = 1.0
 ROC_LTE_THRESHOLD_DEFAULT = -1.0
+# Public EMA 9/21 pattern. Volume confirm is a separate rel_volume condition
+# (the preset uses the existing k=1.5, window=20), not a field on these types.
+EMA_FAST_DEFAULT = 9
+EMA_SLOW_DEFAULT = 21
 # Filled by the ROC(7) public pattern. Omitted `trail_pct` means no stop.
 K2_TRAIL_PCT_DEFAULT = 5.0
 TRAIL_PCT_MAX = 100.0
@@ -78,6 +89,8 @@ _TYPES = _WINDOWED | {
     "donchian_low",
     "roc_gte",
     "roc_lte",
+    "ema_gt_ema",
+    "ema_lt_ema",
 }
 _SIDES = ("long", "flat", "short")
 
@@ -229,6 +242,23 @@ def validate_rules(rules: Any) -> dict[str, Any]:
                     ROC_THRESHOLD_MIN,
                     ROC_THRESHOLD_MAX,
                 )
+            elif ctype in {"ema_gt_ema", "ema_lt_ema"}:
+                fast = _as_int_in(
+                    _present(cond, "fast", EMA_FAST_DEFAULT),
+                    f"{side} {ctype} fast",
+                    _LOOKBACK_MIN,
+                    _LOOKBACK_MAX,
+                )
+                slow = _as_int_in(
+                    _present(cond, "slow", EMA_SLOW_DEFAULT),
+                    f"{side} {ctype} slow",
+                    _LOOKBACK_MIN,
+                    _LOOKBACK_MAX,
+                )
+                if fast == slow:
+                    raise ValueError(f"{side} {ctype} fast and slow must be different spans")
+                item["fast"] = fast
+                item["slow"] = slow
             conds.append(item)
         out[side] = {"logic": logic, "conditions": conds}
     trail = _canonical_trail(rules)
@@ -274,6 +304,7 @@ def signal_requirements(rules: dict[str, Any]) -> dict[str, Any]:
     high: set[int] = set()
     low: set[int] = set()
     roc: set[int] = set()
+    ema: set[int] = set()
     needs_spike = False
     for side in _SIDES:
         for cond in rules.get(side, {}).get("conditions", []):
@@ -288,6 +319,9 @@ def signal_requirements(rules: dict[str, Any]) -> dict[str, Any]:
                 low.add(int(cond["window"]))
             elif ctype in {"roc_gte", "roc_lte"}:
                 roc.add(int(cond["period"]))
+            elif ctype in {"ema_gt_ema", "ema_lt_ema"}:
+                ema.add(int(cond["fast"]))
+                ema.add(int(cond["slow"]))
             elif ctype == "top50_spike":
                 needs_spike = True
     return {
@@ -296,6 +330,7 @@ def signal_requirements(rules: dict[str, Any]) -> dict[str, Any]:
         "donchian_high_windows": sorted(high),
         "donchian_low_windows": sorted(low),
         "roc_periods": sorted(roc),
+        "ema_spans": sorted(ema),
         "needs_spike": needs_spike,
     }
 
@@ -314,6 +349,7 @@ class SignalView:
     prior_high: dict[int, float | None] = field(default_factory=dict)
     prior_low: dict[int, float | None] = field(default_factory=dict)
     roc: dict[int, float | None] = field(default_factory=dict)
+    emas: dict[int, float | None] = field(default_factory=dict)
 
 
 def condition_true(cond: dict[str, Any], view: SignalView) -> bool:
@@ -368,6 +404,14 @@ def condition_true(cond: dict[str, Any], view: SignalView) -> bool:
         if ctype == "roc_gte":
             return value >= float(cond["threshold"])
         return value <= float(cond["threshold"])
+    if ctype in {"ema_gt_ema", "ema_lt_ema"}:
+        fast = view.emas.get(int(cond["fast"]))
+        slow = view.emas.get(int(cond["slow"]))
+        if fast is None or slow is None:
+            return False
+        if ctype == "ema_gt_ema":
+            return fast > slow
+        return fast < slow
     return False
 
 

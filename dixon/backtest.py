@@ -32,6 +32,7 @@ from typing import Any
 import duckdb
 
 from dixon.compute_indicators import (
+    ema,
     ensure_indicators,
     indicator_map,
     load_ohlc,
@@ -297,6 +298,12 @@ def run_backtest(
         period: series_by_date(bars["bar_date"], rate_of_change(bars["close"], period))
         for period in reqs["roc_periods"]
     } if not bars.empty else {}
+    # Same recursive EMA as the chart (`adjust=False`). Full history, so a
+    # window that starts after warm-up still sees spans seeded from earlier bars.
+    ema_maps = {
+        span: series_by_date(bars["bar_date"], ema(bars["close"], span))
+        for span in reqs["ema_spans"]
+    } if not bars.empty else {}
     trail_pct = rules.get("trail_pct")
 
     spikes: set[date] = set()
@@ -362,6 +369,7 @@ def run_backtest(
                         w: low_maps[w].get(bar_date) for w in reqs["donchian_low_windows"]
                     },
                     roc={p: roc_maps[p].get(bar_date) for p in reqs["roc_periods"]},
+                    emas={span: ema_maps[span].get(bar_date) for span in reqs["ema_spans"]},
                 ),
                 book.side_of(symbol),
             )
