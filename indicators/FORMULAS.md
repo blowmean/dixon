@@ -189,6 +189,19 @@ Percent points versus the close `period` bars ago (the signal bar is included; t
 
 A K2-style entry is `roc_gte` period 7 threshold 1 on `long`, and `roc_lte` period 7 threshold −1 on `short`. The band between −1% and +1% does not fire, so an open position is held until a trail, a flat rule, or the opposite side.
 
+### EMA stack — `ema_gt_ema` / `ema_lt_ema`
+
+Same recursive EMA as `EMA_{n}` above (`ewm(span, adjust=False, min_periods=span)`), computed on the strategy timeframe's closes. The signal bar is included. Warm-up values (fewer than `span` closes) are missing and the condition is false.
+
+- `ema_gt_ema`: \(\mathrm{EMA}(\mathrm{fast})_t > \mathrm{EMA}(\mathrm{slow})_t\). Defaults: fast **9**, slow **21**.
+- `ema_lt_ema`: \(\mathrm{EMA}(\mathrm{fast})_t < \mathrm{EMA}(\mathrm{slow})_t\). Same defaults.
+- Spans are integers from 1 to 500. They are not SMA-menu windows, so 21 is valid. `fast` and `slow` must differ. The names are the two spans, not a requirement that `fast` be the shorter one: `ema_gt_ema` with fast 21 and slow 9 is EMA(21) > EMA(9).
+- Equal values are false for both types, so a flat market does not flip a position.
+- The predicate is the stack, true on every bar the inequality holds. It is not limited to the crossing bar. Under the hold-when-silent rule, a one-bar cross would stay in after the stack had already flipped; the inequality is what "long when the fast EMA is above the slow EMA" means.
+- Volume is a separate condition. The public pattern ANDs `rel_volume` with k **1.5** and window **20** on long (`ema_gt_ema`) and on short (`ema_lt_ema`). A bar where the stack has flipped but volume is below 1.5× its average does not fire, so the open side is held. `k` **1** is volume ≥ SMA(volume, 20), still the existing `≥` test.
+
+A three-average stack is two pairwise conditions on the same side (`logic: AND`), for example EMA(9) > EMA(21) and EMA(21) > EMA(50).
+
 ### Trailing stop — `trail_pct`
 
 Optional number on the rules object, not a condition. Percent points: `5` means 5%. Omit or null to disable.

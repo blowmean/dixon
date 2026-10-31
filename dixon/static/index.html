@@ -150,6 +150,7 @@
             RSI takes a period and a threshold (Connors entry is RSI(2) ≤ 5).
             Donchian enters when close breaks the prior N-bar high and exits when close breaks the prior M-bar low (classic 20/10).
             ROC is the percent change versus the close that many bars ago (1 means +1%; default period 7).
+            EMA compares two spans (fast above or below slow; defaults 9 and 21). Those spans are not the SMA menu. The EMA 9/21 preset requires relative volume k=1.5 and N=20 on the same side; a bar that fails volume holds the open position.
             Trail % is optional: blank leaves it off. 5 means a 5% stop from the peak high (long) or trough low (short) since entry, filled at the next open.
             Knobs are per condition — change them, then Save and run a backtest.
           </p>

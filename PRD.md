@@ -131,7 +131,7 @@ Out of this ship: broker routing, alerts, shared strategies, fundamentals, secto
 
 ### S1 signal predicates (one symbol)
 
-Strategy conditions, same CRUD and next-open backtest. Knobs live on each condition and in the Strategies panel (including three public-pattern fillers).
+Strategy conditions, same CRUD and next-open backtest. Knobs live on each condition and in the Strategies panel (including the public-pattern fillers).
 
 | Predicate | Default | Rule |
 | --- | --- | --- |
@@ -139,9 +139,10 @@ Strategy conditions, same CRUD and next-open backtest. Knobs live on each condit
 | `rsi_lte` / `rsi_gte` | period 2, threshold 5 / 70 | Wilder RSI(period) compared with the threshold |
 | `donchian_high` / `donchian_low` | N=20 / M=10 | close > prior N-bar high, or close < prior M-bar low |
 | `roc_gte` / `roc_lte` | period 7, threshold +1% / −1% | ROC(period) in percent points versus the close `period` bars ago. Same single-name AND/OR stack as the rows above |
-| `trail_pct` | off unless set; ROC pattern uses 5 | trailing stop, percent from the peak high (long) or trough low (short) since entry. Close-confirmed; fill is still the next open |
+| `ema_gt_ema` / `ema_lt_ema` | fast 9, slow 21 | EMA(fast) above or below EMA(slow). Stack state, not a one-bar cross. Spans are 1–500 and are not the SMA menu. Volume confirm is a separate `rel_volume` on the same side; the public pattern uses k=1.5, N=20 |
+| `trail_pct` | off unless set; ROC pattern uses 5 | trailing stop, percent from the peak high (long) or trough low (short) since entry. Close-confirmed; fill is still the next open. The EMA pattern does not set it |
 
-Not in this slice: Minervini RS rank, cross-sectional momentum, a shared multi-name book, ATR stops, EMA 9/21 entries, a batch leaderboard.
+Not in this slice: Minervini RS rank, cross-sectional momentum, a shared multi-name book, ATR stops, a batch leaderboard. HK/US v1.2 cost defaults are unchanged.
 
 ## Next steps
 
