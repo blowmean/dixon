@@ -32,6 +32,7 @@ from dixon.compute_indicators import (
 from dixon.config import API_HOST, API_KEY, API_PORT, DB_PATH, GOLDEN_FILE
 from dixon.db import connect, session
 from dixon.screener import build_top50
+from dixon.strategy_board import GRID_VERSION, read_board
 from dixon.strategies import (
     create_strategy,
     delete_strategy,
@@ -495,6 +496,26 @@ def screener_top50(
     with session() as con:
         try:
             return build_top50(con, market_u, on)
+        except ValueError as exc:
+            raise HTTPException(400, str(exc)) from exc
+
+
+@app.get("/strategy-board")
+def strategy_board(
+    market: str = Query("US", description="US only"),
+    as_of: Optional[date] = Query(
+        None, description="Session the board was scored for; default latest stored night"
+    ),
+    grid_version: str = Query(GRID_VERSION),
+    _: None = Depends(_check_key),
+):
+    """Top-3 strategies per US Top-50 name from the overnight board."""
+    market_u = market.strip().upper()
+    if market_u != "US":
+        raise HTTPException(400, "strategy board is US Top-50 only")
+    with session() as con:
+        try:
+            return read_board(con, market=market_u, as_of=as_of, grid_version=grid_version)
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
 

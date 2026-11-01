@@ -198,6 +198,22 @@ tbody tr { cursor: pointer; }
 tbody tr:hover { background: var(--hover); }
 .spike-yes { color: var(--up); font-weight: 700; }
 .spike-no { color: var(--muted); }
+th.sortable { cursor: pointer; user-select: none; }
+th.sort-asc::after { content: " \2191"; }
+th.sort-desc::after { content: " \2193"; }
+td.pnl-up { color: var(--up); font-variant-numeric: tabular-nums; }
+td.pnl-down { color: var(--down); font-variant-numeric: tabular-nums; }
+tr.board-empty { cursor: default; }
+tr.board-empty:hover { background: transparent; }
+tr.board-empty td { white-space: normal; color: var(--muted); }
+.board-note { margin: 0 0 8px; line-height: 1.45; }
+#boardTable th[data-sort="summary"],
+#boardTable td:nth-child(3) {
+  white-space: normal;
+  min-width: 12rem;
+  max-width: 22rem;
+}
+#boardMeta { line-height: 1.4; }
 
 .strategy-layout {
   display: grid;
@@ -310,8 +326,10 @@ tbody tr:hover { background: var(--hover); }
     display: flex;
     flex-direction: column;
   }
-  #tab-screener:not([hidden]) { overflow: hidden; }
-  #tab-screener:not([hidden]) .table-wrap {
+  #tab-screener:not([hidden]),
+  #tab-board:not([hidden]) { overflow: hidden; }
+  #tab-screener:not([hidden]) .table-wrap,
+  #tab-board:not([hidden]) .table-wrap {
     flex: 1 1 auto;
     max-height: none;
     min-height: 160px;

@@ -142,5 +142,41 @@ CREATE TABLE IF NOT EXISTS strategies (
 CREATE INDEX IF NOT EXISTS idx_strategies_owner
   ON strategies (owner_email);
 
+-- Overnight US Top-50 strategy board (grid s1-board-v1).
+-- One slice is (market, grid_version, as_of). A full nightly run deletes that
+-- slice and inserts the top 3 cells per symbol. Re-running the same bars is
+-- bit-stable: higher total P&L, then lower max_drawdown, then fewer closed
+-- trades, then rule_id ASC (the stable rule/params name).
+-- max_drawdown is the backtest fraction (0.10 = 10%), so a P&L tie is auditable.
+-- rank is 1..3 only. costs_flag records which cost schedule was applied
+-- (us-v1.2 = CostModel defaults, no overrides).
+CREATE TABLE IF NOT EXISTS strategy_board (
+  market        VARCHAR NOT NULL,
+  grid_version  VARCHAR NOT NULL,
+  as_of         DATE NOT NULL,
+  symbol        VARCHAR NOT NULL,
+  rank          INTEGER NOT NULL,
+  family        VARCHAR NOT NULL,
+  rule_id       VARCHAR NOT NULL,
+  rules_json    VARCHAR NOT NULL,
+  params_json   VARCHAR NOT NULL,
+  summary       VARCHAR NOT NULL,
+  total_pnl     DOUBLE NOT NULL,
+  max_drawdown  DOUBLE NOT NULL,
+  trade_count   INTEGER NOT NULL,
+  window_start  DATE NOT NULL,
+  window_end    DATE NOT NULL,
+  costs_flag    VARCHAR NOT NULL,
+  computed_at   TIMESTAMP DEFAULT current_timestamp,
+  PRIMARY KEY (market, grid_version, as_of, symbol, rank),
+  CHECK (market IN ('US', 'HK')),
+  CHECK (rank BETWEEN 1 AND 3),
+  CHECK (family IN ('rsi', 'rvol', 'donchian', 'anchor'))
+);
+
+-- Databases created before max_drawdown existed. New databases already have
+-- the column from the CREATE above; IF NOT EXISTS makes this a no-op there.
+ALTER TABLE strategy_board ADD COLUMN IF NOT EXISTS max_drawdown DOUBLE;
+
 -- Optional Hive Parquet lake (written by ingest/rollup):
 --   data/parquet/market={US|HK}/timeframe={daily|weekly|monthly}/year=YYYY/*.parquet

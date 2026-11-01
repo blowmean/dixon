@@ -36,6 +36,10 @@ Logs also append to `logs/api.log` and `logs/cloudflared.log`.
 - `.cf_tunnel_token` — raw tunnel token
 - `.cf_tunnel_token.env` — `TUNNEL_TOKEN=...` for systemd EnvironmentFile
 
+## Strategy board (not installed on the host by the repo)
+
+`python -m dixon.strategy_board` (or `scripts/strategy_board.sh`) writes the US Top-50 overnight board after the daily ingest. Unit files are in `deploy/systemd/`. Prefer a `dixon-daily.service` drop-in with `ExecStartPost=.../scripts/strategy_board.sh` so the sweep follows a successful EOD job. A partial daily (exit 2) does not run `ExecStartPost`; run the script by hand if you still want that night scored. See README “Overnight US Top-50 strategy board”.
+
 ## Notes
 - Mac had no Dixon crontab/LaunchAgent; daily job timer was added on darkstar.
 - Do not run two connectors with the same tunnel token (Mac cloudflared must stay stopped).

@@ -1,0 +1,16 @@
+# Optional weekday schedule. The daily timer is 07:30 HKT; 08:30 leaves
+# room for the ingest. If the ingest often runs longer, use the
+# dixon-daily.service.d drop-in instead of this clock time.
+#
+#   systemctl --user enable --now dixon-strategy-board.timer
+
+[Unit]
+Description=Dixon strategy board after the weekday US EOD ingest
+
+[Timer]
+OnCalendar=Mon..Fri 08:30:00 Asia/Hong_Kong
+Persistent=true
+Unit=dixon-strategy-board.service
+
+[Install]
+WantedBy=timers.target
