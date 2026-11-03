@@ -11,6 +11,10 @@ Condition types:
                                defaults period=2, threshold 5 (lte) or 70 (gte)
   donchian_high                close > max high of the previous `window` bars (default 20)
   donchian_low                 close < min low of the previous `window` bars (default 10)
+  close_lowest                 close equals the min close of the last `window` bars,
+                               including today (default 7). Ties count. Not a Donchian low.
+  close_highest                close equals the max close of the last `window` bars,
+                               including today (default 7). Ties count. Not a Donchian high.
   roc_gte, roc_lte             ROC(period) >= or <= threshold, in percent points
                                ROC = (close / close_period_bars_ago − 1) × 100
                                defaults period=7, threshold +1 (gte) or −1 (lte)
@@ -42,6 +46,12 @@ decision would keep the held side (still-true entry, or hold). An opposite
 side on the same close still reverses.
 Donchian high and low breaks are mutually exclusive for overlapping lookbacks,
 so a 20-bar high entry and a 10-bar low exit can share one bar's decision.
+
+Connors Double Seven is long when `close_lowest` (N=7) and `price_gt_ma` window
+200 are both true, and flat when `close_highest` is true. There is no trail.
+The SMA(200) gate only filters entries: a long already open is held when price
+falls through that average, until the N-day high close. A flat tape makes every
+close both the min and the max, and the long-over-flat priority then holds.
 """
 
 from __future__ import annotations
@@ -49,7 +59,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-MA_MENU: tuple[int, ...] = (5, 9, 20, 30, 50, 100, 250)
+# 200 is the chart MA and the Double Seven trend gate (close > SMA(200)).
+MA_MENU: tuple[int, ...] = (5, 9, 20, 30, 50, 100, 200, 250)
 MA_MENU_SET = set(MA_MENU)
 
 REL_VOLUME_K_DEFAULT = 1.5
@@ -59,6 +70,8 @@ RSI_LTE_THRESHOLD_DEFAULT = 5.0
 RSI_GTE_THRESHOLD_DEFAULT = 70.0
 DONCHIAN_HIGH_DEFAULT = 20
 DONCHIAN_LOW_DEFAULT = 10
+# Connors Double Seven lookback. Any integer from 1 to 500, so 4–7 can be swept.
+CLOSE_EXTREME_N_DEFAULT = 7
 ROC_PERIOD_DEFAULT = 7
 ROC_GTE_THRESHOLD_DEFAULT = 1.0
 ROC_LTE_THRESHOLD_DEFAULT = -1.0
@@ -87,6 +100,8 @@ _TYPES = _WINDOWED | {
     "rsi_gte",
     "donchian_high",
     "donchian_low",
+    "close_lowest",
+    "close_highest",
     "roc_gte",
     "roc_lte",
     "ema_gt_ema",
@@ -226,6 +241,13 @@ def validate_rules(rules: Any) -> dict[str, Any]:
                     _LOOKBACK_MIN,
                     _LOOKBACK_MAX,
                 )
+            elif ctype in {"close_lowest", "close_highest"}:
+                item["window"] = _as_int_in(
+                    _present(cond, "window", CLOSE_EXTREME_N_DEFAULT),
+                    f"{side} {ctype} window",
+                    _LOOKBACK_MIN,
+                    _LOOKBACK_MAX,
+                )
             elif ctype in {"roc_gte", "roc_lte"}:
                 default_threshold = (
                     ROC_GTE_THRESHOLD_DEFAULT if ctype == "roc_gte" else ROC_LTE_THRESHOLD_DEFAULT
@@ -284,7 +306,7 @@ def _canonical_trail(rules: dict[str, Any]) -> float | None:
 
 
 def windows_used(rules: dict[str, Any]) -> list[int]:
-    """Price-SMA windows. Volume and Donchian lookbacks are not MA menu windows."""
+    """Price-SMA windows. Volume, Donchian, and close-extreme lookbacks are not."""
     found: set[int] = set()
     for side in _SIDES:
         for cond in rules.get(side, {}).get("conditions", []):
@@ -303,6 +325,8 @@ def signal_requirements(rules: dict[str, Any]) -> dict[str, Any]:
     volume: set[int] = set()
     high: set[int] = set()
     low: set[int] = set()
+    close_low: set[int] = set()
+    close_high: set[int] = set()
     roc: set[int] = set()
     ema: set[int] = set()
     needs_spike = False
@@ -317,6 +341,10 @@ def signal_requirements(rules: dict[str, Any]) -> dict[str, Any]:
                 high.add(int(cond["window"]))
             elif ctype == "donchian_low":
                 low.add(int(cond["window"]))
+            elif ctype == "close_lowest":
+                close_low.add(int(cond["window"]))
+            elif ctype == "close_highest":
+                close_high.add(int(cond["window"]))
             elif ctype in {"roc_gte", "roc_lte"}:
                 roc.add(int(cond["period"]))
             elif ctype in {"ema_gt_ema", "ema_lt_ema"}:
@@ -329,6 +357,8 @@ def signal_requirements(rules: dict[str, Any]) -> dict[str, Any]:
         "volume_windows": sorted(volume),
         "donchian_high_windows": sorted(high),
         "donchian_low_windows": sorted(low),
+        "close_low_windows": sorted(close_low),
+        "close_high_windows": sorted(close_high),
         "roc_periods": sorted(roc),
         "ema_spans": sorted(ema),
         "needs_spike": needs_spike,
@@ -348,6 +378,8 @@ class SignalView:
     rsi: dict[int, float | None] = field(default_factory=dict)
     prior_high: dict[int, float | None] = field(default_factory=dict)
     prior_low: dict[int, float | None] = field(default_factory=dict)
+    close_min: dict[int, float | None] = field(default_factory=dict)
+    close_max: dict[int, float | None] = field(default_factory=dict)
     roc: dict[int, float | None] = field(default_factory=dict)
     emas: dict[int, float | None] = field(default_factory=dict)
 
@@ -397,6 +429,10 @@ def condition_true(cond: dict[str, Any], view: SignalView) -> bool:
     if ctype == "donchian_low":
         level = view.prior_low.get(cond["window"])
         return level is not None and view.close < level
+    if ctype == "close_lowest":
+        return _at_extreme(view.close, view.close_min.get(cond["window"]))
+    if ctype == "close_highest":
+        return _at_extreme(view.close, view.close_max.get(cond["window"]))
     if ctype in {"roc_gte", "roc_lte"}:
         value = view.roc.get(int(cond["period"]))
         if value is None:
@@ -446,6 +482,17 @@ def trail_triggered(side: str, extreme: float, close: float, trail_pct: float) -
 
 def _finite(value: float) -> bool:
     return isinstance(value, (int, float)) and value == value and abs(value) != float("inf")
+
+
+def _at_extreme(close: float, level: float | None) -> bool:
+    """True when `close` is the inclusive window extreme. Ties count.
+
+    The level is the min or max of a window that contains this close, so an
+    exact match is the definition. A missing warm-up level is false.
+    """
+    if level is None or not _finite(close) or not _finite(level):
+        return False
+    return float(close) == float(level)
 
 
 def _group_true(group: dict[str, Any], view: SignalView) -> bool:

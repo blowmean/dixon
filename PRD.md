@@ -116,7 +116,7 @@ Shipped in this repo (research / backtest only):
 | --- | --- |
 | Volume histogram under candles, bottom ~25% of the price pane | `dixon/static/app.js` (`priceScale("right")` bottom 0.25, volume scale top 0.75) |
 | Top-50 HK and US pools + spike flags | `GET /screener/top50?market=HK\|US&date=YYYY-MM-DD` |
-| SMA menu 5, 9, 20, 30, 50, 100, 250 on D/W/M, on-demand DuckDB cache | `GET /indicators` (`name` or `names`, `timeframe`) |
+| SMA menu 5, 9, 20, 30, 50, 100, 200, 250 on D/W/M, on-demand DuckDB cache | `GET /indicators` (`name` or `names`, `timeframe`) |
 | Owner-private strategy CRUD, one symbol | `GET/POST /strategies`, `GET/PUT/DELETE /strategies/{id}` |
 | Next-open backtest, 20% equity, synthetic shorts, dated P&L | `POST /strategies/{id}/backtest` |
 | Golden P&L lock | `python scripts/golden_backtest.py` |
@@ -138,6 +138,7 @@ Strategy conditions, same CRUD and next-open backtest. Knobs live on each condit
 | `rel_volume` | k=1.5, N=20 | volume ≥ k × SMA(volume, N), average includes the signal bar |
 | `rsi_lte` / `rsi_gte` | period 2, threshold 5 / 70 | Wilder RSI(period) compared with the threshold |
 | `donchian_high` / `donchian_low` | N=20 / M=10 | close > prior N-bar high, or close < prior M-bar low |
+| `close_lowest` / `close_highest` | N=7 | close equals the min or max close of the last N bars, including today. Connors Double Seven ANDs the low with close > SMA(200) and exits on the high. No trail. Not Donchian |
 | `roc_gte` / `roc_lte` | period 7, threshold +1% / −1% | ROC(period) in percent points versus the close `period` bars ago. Same single-name AND/OR stack as the rows above |
 | `ema_gt_ema` / `ema_lt_ema` | fast 9, slow 21 | EMA(fast) above or below EMA(slow). Stack state, not a one-bar cross. Spans are 1–500 and are not the SMA menu. Volume confirm is a separate `rel_volume` on the same side; the public pattern uses k=1.5, N=20 |
 | `trail_pct` | off unless set; ROC pattern uses 5 | trailing stop, percent from the peak high (long) or trough low (short) since entry. Close-confirmed; fill is still the next open. The EMA pattern does not set it |

@@ -56,6 +56,23 @@ def prior_low(low: pd.Series, window: int) -> pd.Series:
     return pd.to_numeric(low, errors="coerce").shift(1).rolling(window, min_periods=window).min()
 
 
+def rolling_close_min(close: pd.Series, window: int) -> pd.Series:
+    """Minimum close of the last `window` bars, including the current bar.
+
+    This is the Double Seven entry level. It is not `prior_low`: that series
+    is the min low of the previous bars and drops today.
+    """
+    return pd.to_numeric(close, errors="coerce").rolling(window, min_periods=window).min()
+
+
+def rolling_close_max(close: pd.Series, window: int) -> pd.Series:
+    """Maximum close of the last `window` bars, including the current bar.
+
+    This is the Double Seven exit level. It is not `prior_high`.
+    """
+    return pd.to_numeric(close, errors="coerce").rolling(window, min_periods=window).max()
+
+
 def rate_of_change(close: pd.Series, period: int) -> pd.Series:
     """ROC in percent points: (close / close_n_bars_ago − 1) × 100.
 
@@ -138,7 +155,7 @@ DEFAULT_SPECS = [
 
 def compute_frame(close: pd.Series) -> dict[str, pd.Series]:
     out: dict[str, pd.Series] = {}
-    for window in (*MA_MENU, 200):
+    for window in MA_MENU:
         out[f"MA_{window}"] = sma(close, window)
     out["EMA_12"] = ema(close, 12)
     out["EMA_26"] = ema(close, 26)

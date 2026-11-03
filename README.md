@@ -275,7 +275,7 @@ python -m dixon.api
 - Symbol picker: DB active symbols (falls back to golden set)
 - Timeframe: daily / weekly / monthly (adjusted OHLC from `/bars`)
 - Price pane: candlesticks with the bottom ~25% reserved for the volume histogram (`priceScale("right")` bottom 0.25, volume scale top 0.75)
-- SMA menu: 5, 9, 20, 30, 50, 100, 250, plus existing MA 200 / EMA 12 / EMA 26 / Bollinger
+- SMA menu: 5, 9, 20, 30, 50, 100, 200, 250, plus EMA 12 / EMA 26 / Bollinger
 - Lower panes: `RSI_14`, `MACD_12_26_9` + signal + hist (see `indicators/FORMULAS.md`)
 - Weekly/monthly: overlays are computed on that timeframe's bars (cached on first use)
 - Top-50 panel and a private strategy editor (save, then run a dated backtest: equity curve, trades, win rate, max drawdown)
@@ -309,10 +309,13 @@ One symbol per strategy. `timeframe` is `daily`, `weekly`, or `monthly`. Each of
 | `rsi_lte` / `rsi_gte` | `period` (default **2**), `threshold` (default **5** / **70**) | Wilder RSI(period) ≤ or ≥ threshold. Same formula as `RSI_14`, period not fixed |
 | `donchian_high` | `window` (default **20**) | close > max `high` of the previous N bars (the signal bar is excluded) |
 | `donchian_low` | `window` (default **10**) | close < min `low` of the previous M bars (the signal bar is excluded) |
+| `close_lowest` / `close_highest` | `window` (default **7**) | close equals the min or max **close** of the last N bars, including today. Ties count. Not Donchian high/low |
 | `roc_gte` / `roc_lte` | `period` (default **7**), `threshold` (default **+1** / **−1**) | ROC(period) ≥ or ≤ threshold. ROC is percent points: `(close / close N bars ago − 1) × 100`. **1 means +1%**, not 100% and not the fraction 0.01 |
 | `ema_gt_ema` / `ema_lt_ema` | `fast` (default **9**), `slow` (default **21**) | EMA(fast) > EMA(slow), or EMA(fast) < EMA(slow). Same recursive EMA as the chart (`span`, `adjust=False`). The condition is the stack: it stays true on every later bar the inequality holds, not only the cross bar. Equal values and warm-up are false. `fast` and `slow` must differ. 21 is allowed because these are not SMA-menu windows |
 
-Price-SMA windows must be the fixed menu: 5, 9, 20, 30, 50, 100, 250. Relative-volume, Donchian, ROC, and EMA spans are any integer from 1 to 500; RSI period is 1 to 250 and its threshold is 0 to 100. ROC threshold is −100 to 10000 percent points. EMA `fast` and `slow` must differ. Omitted knobs are stored as the defaults above. Lookbacks count **bars of the strategy timeframe** (a daily strategy's 20 is 20 sessions, not calendar days).
+Price-SMA windows must be the fixed menu: 5, 9, 20, 30, 50, 100, 200, 250. Relative-volume, Donchian, close-extreme, ROC, and EMA spans are any integer from 1 to 500; RSI period is 1 to 250 and its threshold is 0 to 100. ROC threshold is −100 to 10000 percent points. EMA `fast` and `slow` must differ. Omitted knobs are stored as the defaults above. Lookbacks count **bars of the strategy timeframe** (a daily strategy's 20 is 20 sessions, not calendar days).
+
+`close_lowest` / `close_highest` read closes, including the signal bar. Donchian reads prior highs and lows and skips today, so the two disagree when a wick makes the high or low more extreme than the closes. Connors Double Seven is long on `close_lowest` N=7 **and** close > SMA(200), flat on `close_highest` N=7, with no `trail_pct`. The average does not flatten an open long.
 
 Volume is not a field on the EMA types. Confirm with the existing `rel_volume` condition on the same side (`logic: AND`). The public EMA 9/21 pattern uses `k` **1.5** and `window` **20** (volume ≥ 1.5 × SMA(volume, 20)). Set `k` to **1** when you want volume at least equal to that average; the comparison is still `≥`, including the signal bar. A quiet bar does not fire, so an open position is held until the other side confirms, a flat rule, or a trail.
 
@@ -342,7 +345,7 @@ Optional top-level `trail_pct` is a trailing stop in **percent points** (5 means
 
 An empty side never fires. If long and short both fire, the target is flat; otherwise long, then short, then the flat rule, otherwise hold. Put signal exits on `flat`: a flat rule does not override a long or short rule that is still true. The trail is the exception: it overrides a still-true entry on the held side. The fill is the **next stored bar's open**.
 
-In `/ui/`, open **Strategies**. Each condition row has the extra knobs when the type needs them (k and N, RSI period and threshold, Donchian N or M, ROC period and ±% threshold, EMA fast and slow spans). **Trail % from peak** is the optional stop (blank = off). The **Public patterns** buttons fill a volume-confirmed SMA(20) breakout, a Connors-style RSI(2) ≤ 5 entry that exits on close > SMA(5) or RSI(2) ≥ 70, a Donchian 20/10 channel, ROC(7) ±1% with a 5% trail, and EMA 9/21 with relative volume (k=1.5, N=20) on both long and short. Edit the numbers, Save, then run a dated backtest. ATR stops are not part of this slice. EMA and ROC compose with the other predicates: put `rel_volume`, `rsi_lte` / `rsi_gte`, Donchian, ROC, or an MA rule on the same side with `logic: AND`.
+In `/ui/`, open **Strategies**. Each condition row has the extra knobs when the type needs them (k and N, RSI period and threshold, Donchian N or M, close-extreme N, ROC period and ±% threshold, EMA fast and slow spans). **Trail % from peak** is the optional stop (blank = off). The **Public patterns** buttons fill a volume-confirmed SMA(20) breakout, a Connors-style RSI(2) ≤ 5 entry that exits on close > SMA(5) or RSI(2) ≥ 70, a Donchian 20/10 channel, ROC(7) ±1% with a 5% trail, EMA 9/21 with relative volume (k=1.5, N=20) on both long and short, and Double Seven (N=7 close low, long only above SMA(200), exit on the N-day high close, no trail). Edit the numbers, Save, then run a dated backtest. ATR stops are not part of this slice. EMA, ROC, and the close extreme compose with the other predicates: put `rel_volume`, `rsi_lte` / `rsi_gte`, Donchian, ROC, a close extreme, or an MA rule on the same side with `logic: AND`.
 
 ```bash
 curl -s -X POST localhost:8765/strategies \
