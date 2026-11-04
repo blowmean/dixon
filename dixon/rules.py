@@ -9,6 +9,12 @@ Condition types:
   rel_volume                   volume >= k * SMA(volume, window); defaults k=1.5, window=20
   rsi_lte, rsi_gte             Wilder RSI(period) <= or >= threshold
                                defaults period=2, threshold 5 (lte) or 70 (gte)
+  rsi_falling_n, rsi_rising_n  Wilder RSI(period) strictly fell, or rose, versus
+                               the prior bar on each of the last `n` closes.
+                               Defaults period=14 (the chart RSI), n=3 steps.
+                               Equality breaks the run. This is the slope of
+                               RSI, not a z-score of the RSI level, and not
+                               the threshold tests above.
   donchian_high                close > max high of the previous `window` bars (default 20)
   donchian_low                 close < min low of the previous `window` bars (default 10)
   close_lowest                 close equals the min close of the last `window` bars,
@@ -52,6 +58,13 @@ Connors Double Seven is long when `close_lowest` (N=7) and `price_gt_ma` window
 The SMA(200) gate only filters entries: a long already open is held when price
 falls through that average, until the N-day high close. A flat tape makes every
 close both the min and the max, and the long-over-flat priority then holds.
+
+RSI slope is the same hold rule. `rsi_rising_n` and `rsi_falling_n` are true
+only on the bars that complete the streak, so a quiet bar after the streak
+holds the open side until the opposite streak, a flat rule, or a trail.
+The same period cannot both rise and fall on one bar. Two different periods
+can, and that conflict goes flat. The public pattern is long on a 3-bar rise
+of RSI(14) and short on a 3-bar fall, with no trail.
 """
 
 from __future__ import annotations
@@ -68,6 +81,11 @@ REL_VOLUME_WINDOW_DEFAULT = 20
 RSI_PERIOD_DEFAULT = 2
 RSI_LTE_THRESHOLD_DEFAULT = 5.0
 RSI_GTE_THRESHOLD_DEFAULT = 70.0
+# Public RSI slope pattern. Period 14 is the chart Wilder RSI, not the
+# Connors RSI(2) level test. N is a count of strict steps (3 means
+# RSI_t ? RSI_{t-1} ? RSI_{t-2} ? RSI_{t-3}), not a z-score window.
+RSI_SLOPE_PERIOD_DEFAULT = 14
+RSI_SLOPE_N_DEFAULT = 3
 DONCHIAN_HIGH_DEFAULT = 20
 DONCHIAN_LOW_DEFAULT = 10
 # Connors Double Seven lookback. Any integer from 1 to 500, so 4–7 can be swept.
@@ -98,6 +116,8 @@ _TYPES = _WINDOWED | {
     "rel_volume",
     "rsi_lte",
     "rsi_gte",
+    "rsi_falling_n",
+    "rsi_rising_n",
     "donchian_high",
     "donchian_low",
     "close_lowest",
@@ -227,6 +247,19 @@ def validate_rules(rules: Any) -> dict[str, Any]:
                     0.0,
                     100.0,
                 )
+            elif ctype in {"rsi_falling_n", "rsi_rising_n"}:
+                item["period"] = _as_int_in(
+                    _present(cond, "period", RSI_SLOPE_PERIOD_DEFAULT),
+                    f"{side} {ctype} period",
+                    _RSI_PERIOD_MIN,
+                    _RSI_PERIOD_MAX,
+                )
+                item["n"] = _as_int_in(
+                    _present(cond, "n", RSI_SLOPE_N_DEFAULT),
+                    f"{side} {ctype} n",
+                    _LOOKBACK_MIN,
+                    _LOOKBACK_MAX,
+                )
             elif ctype == "donchian_high":
                 item["window"] = _as_int_in(
                     _present(cond, "window", DONCHIAN_HIGH_DEFAULT),
@@ -306,7 +339,7 @@ def _canonical_trail(rules: dict[str, Any]) -> float | None:
 
 
 def windows_used(rules: dict[str, Any]) -> list[int]:
-    """Price-SMA windows. Volume, Donchian, and close-extreme lookbacks are not."""
+    """Price-SMA windows. Volume, Donchian, close-extreme, and RSI-slope lookbacks are not."""
     found: set[int] = set()
     for side in _SIDES:
         for cond in rules.get(side, {}).get("conditions", []):
@@ -322,6 +355,8 @@ def windows_used(rules: dict[str, Any]) -> list[int]:
 def signal_requirements(rules: dict[str, Any]) -> dict[str, Any]:
     """Series the backtest must build before evaluating `rules`."""
     rsi: set[int] = set()
+    rsi_falling: set[tuple[int, int]] = set()
+    rsi_rising: set[tuple[int, int]] = set()
     volume: set[int] = set()
     high: set[int] = set()
     low: set[int] = set()
@@ -335,6 +370,10 @@ def signal_requirements(rules: dict[str, Any]) -> dict[str, Any]:
             ctype = cond.get("type")
             if ctype in {"rsi_lte", "rsi_gte"}:
                 rsi.add(int(cond["period"]))
+            elif ctype == "rsi_falling_n":
+                rsi_falling.add((int(cond["period"]), int(cond["n"])))
+            elif ctype == "rsi_rising_n":
+                rsi_rising.add((int(cond["period"]), int(cond["n"])))
             elif ctype == "rel_volume":
                 volume.add(int(cond["window"]))
             elif ctype == "donchian_high":
@@ -354,6 +393,8 @@ def signal_requirements(rules: dict[str, Any]) -> dict[str, Any]:
                 needs_spike = True
     return {
         "rsi_periods": sorted(rsi),
+        "rsi_falling": [[period, n] for period, n in sorted(rsi_falling)],
+        "rsi_rising": [[period, n] for period, n in sorted(rsi_rising)],
         "volume_windows": sorted(volume),
         "donchian_high_windows": sorted(high),
         "donchian_low_windows": sorted(low),
@@ -376,6 +417,9 @@ class SignalView:
     volume: float | None = None
     vol_sma: dict[int, float | None] = field(default_factory=dict)
     rsi: dict[int, float | None] = field(default_factory=dict)
+    # (period, n) → 1.0 when that Wilder RSI completed an n-step slope run.
+    rsi_falling: dict[tuple[int, int], float | None] = field(default_factory=dict)
+    rsi_rising: dict[tuple[int, int], float | None] = field(default_factory=dict)
     prior_high: dict[int, float | None] = field(default_factory=dict)
     prior_low: dict[int, float | None] = field(default_factory=dict)
     close_min: dict[int, float | None] = field(default_factory=dict)
@@ -423,6 +467,11 @@ def condition_true(cond: dict[str, Any], view: SignalView) -> bool:
         if ctype == "rsi_lte":
             return value <= float(cond["threshold"])
         return value >= float(cond["threshold"])
+    if ctype in {"rsi_falling_n", "rsi_rising_n"}:
+        key = (int(cond["period"]), int(cond["n"]))
+        slot = view.rsi_falling if ctype == "rsi_falling_n" else view.rsi_rising
+        flag = slot.get(key)
+        return flag is not None and flag == 1.0
     if ctype == "donchian_high":
         level = view.prior_high.get(cond["window"])
         return level is not None and view.close > level

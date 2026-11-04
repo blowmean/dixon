@@ -1,0 +1,566 @@
+{
+  "book": "long rsi_rising_n / short rsi_falling_n",
+  "costs": "us-v1.2-defaults",
+  "end": "2024-03-23",
+  "n": 3,
+  "note": "slope streak, not an RSI z-score",
+  "period": 14,
+  "result": {
+    "currency": "USD",
+    "equity_curve": [
+      {
+        "cash": 100000.0,
+        "date": "2024-01-02",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-01-03",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-01-04",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-01-05",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-01-06",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-01-07",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-01-08",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-01-09",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-01-10",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-01-11",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-01-12",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-01-13",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-01-14",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-01-15",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-01-16",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-01-17",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-01-18",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-01-19",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-01-20",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-01-21",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-01-22",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-01-23",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-01-24",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-01-25",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-01-26",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-01-27",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-01-28",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-01-29",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-01-30",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-01-31",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-02-01",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-02-02",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-02-03",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-02-04",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-02-05",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-02-06",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-02-07",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-02-08",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-02-09",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-02-10",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-02-11",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-02-12",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-02-13",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 79989.0,
+        "date": "2024-02-14",
+        "equity": 100165.99115,
+        "side": "long"
+      },
+      {
+        "cash": 79989.0,
+        "date": "2024-02-15",
+        "equity": 100342.982301,
+        "side": "long"
+      },
+      {
+        "cash": 79989.0,
+        "date": "2024-02-16",
+        "equity": 100519.973451,
+        "side": "long"
+      },
+      {
+        "cash": 79989.0,
+        "date": "2024-02-17",
+        "equity": 100696.964602,
+        "side": "long"
+      },
+      {
+        "cash": 79989.0,
+        "date": "2024-02-18",
+        "equity": 100873.955752,
+        "side": "long"
+      },
+      {
+        "cash": 79989.0,
+        "date": "2024-02-19",
+        "equity": 101050.946903,
+        "side": "long"
+      },
+      {
+        "cash": 79989.0,
+        "date": "2024-02-20",
+        "equity": 101227.938053,
+        "side": "long"
+      },
+      {
+        "cash": 79989.0,
+        "date": "2024-02-21",
+        "equity": 101404.929204,
+        "side": "long"
+      },
+      {
+        "cash": 79989.0,
+        "date": "2024-02-22",
+        "equity": 101581.920354,
+        "side": "long"
+      },
+      {
+        "cash": 79989.0,
+        "date": "2024-02-23",
+        "equity": 101758.911504,
+        "side": "long"
+      },
+      {
+        "cash": 79989.0,
+        "date": "2024-02-24",
+        "equity": 101935.902655,
+        "side": "long"
+      },
+      {
+        "cash": 79989.0,
+        "date": "2024-02-25",
+        "equity": 102112.893805,
+        "side": "long"
+      },
+      {
+        "cash": 79989.0,
+        "date": "2024-02-26",
+        "equity": 101935.902655,
+        "side": "long"
+      },
+      {
+        "cash": 79989.0,
+        "date": "2024-02-27",
+        "equity": 101758.911504,
+        "side": "long"
+      },
+      {
+        "cash": 79989.0,
+        "date": "2024-02-28",
+        "equity": 101581.920354,
+        "side": "long"
+      },
+      {
+        "cash": 121872.99166,
+        "date": "2024-02-29",
+        "equity": 101725.475281,
+        "side": "short"
+      },
+      {
+        "cash": 121872.99166,
+        "date": "2024-03-01",
+        "equity": 101891.983681,
+        "side": "short"
+      },
+      {
+        "cash": 121872.99166,
+        "date": "2024-03-02",
+        "equity": 102058.492081,
+        "side": "short"
+      },
+      {
+        "cash": 121872.99166,
+        "date": "2024-03-03",
+        "equity": 102225.000481,
+        "side": "short"
+      },
+      {
+        "cash": 121872.99166,
+        "date": "2024-03-04",
+        "equity": 102391.508881,
+        "side": "short"
+      },
+      {
+        "cash": 121872.99166,
+        "date": "2024-03-05",
+        "equity": 102558.01728,
+        "side": "short"
+      },
+      {
+        "cash": 121872.99166,
+        "date": "2024-03-06",
+        "equity": 102724.52568,
+        "side": "short"
+      },
+      {
+        "cash": 121872.99166,
+        "date": "2024-03-07",
+        "equity": 102891.03408,
+        "side": "short"
+      },
+      {
+        "cash": 121872.99166,
+        "date": "2024-03-08",
+        "equity": 103057.54248,
+        "side": "short"
+      },
+      {
+        "cash": 121872.99166,
+        "date": "2024-03-09",
+        "equity": 103224.05088,
+        "side": "short"
+      },
+      {
+        "cash": 121872.99166,
+        "date": "2024-03-10",
+        "equity": 103390.55928,
+        "side": "short"
+      },
+      {
+        "cash": 121872.99166,
+        "date": "2024-03-11",
+        "equity": 103557.067679,
+        "side": "short"
+      },
+      {
+        "cash": 121872.99166,
+        "date": "2024-03-12",
+        "equity": 103473.813479,
+        "side": "short"
+      },
+      {
+        "cash": 121872.99166,
+        "date": "2024-03-13",
+        "equity": 103390.55928,
+        "side": "short"
+      },
+      {
+        "cash": 121872.99166,
+        "date": "2024-03-14",
+        "equity": 103307.30508,
+        "side": "short"
+      },
+      {
+        "cash": 82626.288087,
+        "date": "2024-03-15",
+        "equity": 103378.335603,
+        "side": "long"
+      },
+      {
+        "cash": 82626.288087,
+        "date": "2024-03-16",
+        "equity": 103470.978673,
+        "side": "long"
+      },
+      {
+        "cash": 82626.288087,
+        "date": "2024-03-17",
+        "equity": 103563.621742,
+        "side": "long"
+      },
+      {
+        "cash": 82626.288087,
+        "date": "2024-03-18",
+        "equity": 103656.264811,
+        "side": "long"
+      },
+      {
+        "cash": 82626.288087,
+        "date": "2024-03-19",
+        "equity": 103748.90788,
+        "side": "long"
+      },
+      {
+        "cash": 82626.288087,
+        "date": "2024-03-20",
+        "equity": 103841.55095,
+        "side": "long"
+      },
+      {
+        "cash": 82626.288087,
+        "date": "2024-03-21",
+        "equity": 103934.194019,
+        "side": "long"
+      },
+      {
+        "cash": 82626.288087,
+        "date": "2024-03-22",
+        "equity": 104026.837088,
+        "side": "long"
+      },
+      {
+        "cash": 82626.288087,
+        "date": "2024-03-23",
+        "equity": 104119.480158,
+        "side": "long"
+      }
+    ],
+    "metrics": {
+      "ending_equity": 104119.480158,
+      "max_drawdown": 0.00519987,
+      "max_drawdown_meets_target": true,
+      "max_drawdown_target": 0.1,
+      "total_pnl": 4119.480158,
+      "total_return": 0.0411948,
+      "trade_count": 2,
+      "win_rate": 1.0,
+      "win_rate_meets_target": true,
+      "win_rate_target": 0.5
+    },
+    "open_position": {
+      "entry_date": "2024-03-15",
+      "entry_price": 111.5,
+      "mark": 116.0,
+      "notional": 20659.404447,
+      "shares": 185.28613854,
+      "side": "long",
+      "symbol": "AAPL",
+      "unrealized_pnl": 822.457921
+    },
+    "starting_capital": 100000.0,
+    "trades": [
+      {
+        "entry_commission": 1.0,
+        "entry_date": "2024-02-14",
+        "entry_price": 113.0,
+        "entry_slippage": 10.0,
+        "exit_commission": 1.0,
+        "exit_date": "2024-02-29",
+        "exit_price": 122.0,
+        "exit_reason": "signal",
+        "exit_slippage": 10.79646,
+        "notional": 20000.0,
+        "pnl": 1570.123894,
+        "return_on_notional": 0.07850619,
+        "shares": 176.99115044,
+        "side": "long",
+        "symbol": "AAPL"
+      },
+      {
+        "entry_commission": 1.0,
+        "entry_date": "2024-02-29",
+        "entry_price": 122.0,
+        "entry_slippage": 10.157012,
+        "exit_commission": 1.0,
+        "exit_date": "2024-03-15",
+        "exit_price": 111.5,
+        "exit_reason": "signal",
+        "exit_slippage": 9.282843,
+        "notional": 20314.024779,
+        "pnl": 1726.898342,
+        "return_on_notional": 0.08501015,
+        "shares": 166.50839983,
+        "side": "short",
+        "symbol": "AAPL"
+      }
+    ]
+  },
+  "start": "2024-01-02",
+  "symbol": "AAPL"
+}

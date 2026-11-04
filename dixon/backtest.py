@@ -41,6 +41,7 @@ from dixon.compute_indicators import (
     rate_of_change,
     rolling_close_max,
     rolling_close_min,
+    rsi_slope_streak,
     series_by_date,
     volume_sma,
 )
@@ -314,6 +315,25 @@ def run_backtest(
         span: series_by_date(bars["bar_date"], ema(bars["close"], span))
         for span in reqs["ema_spans"]
     } if not bars.empty else {}
+    # Same Wilder RSI as RSI_{period} (`rsi_wilder`). The flag is the slope
+    # run, not a z-score of that level. Full history, so a window that starts
+    # after warm-up still sees streaks seeded from earlier bars.
+    falling_pairs = [(int(period), int(n)) for period, n in reqs["rsi_falling"]]
+    rising_pairs = [(int(period), int(n)) for period, n in reqs["rsi_rising"]]
+    falling_maps = {
+        pair: series_by_date(
+            bars["bar_date"],
+            rsi_slope_streak(bars["close"], pair[0], pair[1], falling=True),
+        )
+        for pair in falling_pairs
+    } if not bars.empty else {}
+    rising_maps = {
+        pair: series_by_date(
+            bars["bar_date"],
+            rsi_slope_streak(bars["close"], pair[0], pair[1], falling=False),
+        )
+        for pair in rising_pairs
+    } if not bars.empty else {}
     trail_pct = rules.get("trail_pct")
 
     spikes: set[date] = set()
@@ -372,6 +392,12 @@ def run_backtest(
                     volume=_bar_float(rec.get("volume")),
                     vol_sma={w: vol_maps[w].get(bar_date) for w in reqs["volume_windows"]},
                     rsi={p: rsi_maps[p].get(bar_date) for p in reqs["rsi_periods"]},
+                    rsi_falling={
+                        pair: falling_maps[pair].get(bar_date) for pair in falling_pairs
+                    },
+                    rsi_rising={
+                        pair: rising_maps[pair].get(bar_date) for pair in rising_pairs
+                    },
                     prior_high={
                         w: high_maps[w].get(bar_date) for w in reqs["donchian_high_windows"]
                     },
