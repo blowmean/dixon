@@ -74,6 +74,7 @@
     ["ema_lt_ema", "EMA fast < slow"],
     ["keltner_below", "Close < Keltner lower"],
     ["keltner_above", "Close > Keltner mid"],
+    ["consec_down_n", "Close down N days"],
   ];
   const PREDICATE_DEFAULTS = {
     rel_volume: { k: 1.5, window: 20 },
@@ -94,6 +95,7 @@
     ema_lt_ema: { fast: 9, slow: 21 },
     keltner_below: { keltner_len: 6, atr_mult: 1.3 },
     keltner_above: { keltner_len: 6, atr_mult: 1.3 },
+    consec_down_n: { n: 3 },
   };
 
   function $(id) {
@@ -968,6 +970,10 @@
     return type === "keltner_below" || type === "keltner_above";
   }
 
+  function isConsecDownType(type) {
+    return type === "consec_down_n";
+  }
+
   function formatStack(cond) {
     const op = (cond.direction || "up") === "down" ? "<" : ">";
     return (cond.windows || []).join(op);
@@ -1024,7 +1030,7 @@
           ? cond.fast
           : (isKeltnerType(cond.type)
             ? cond.keltner_len
-            : (isRsiStreakType(cond.type)
+            : (isConsecDownType(cond.type) || isRsiStreakType(cond.type)
               ? cond.n
               : (isRsiType(cond.type) || isRocType(cond.type) || isWillrType(cond.type)
                 ? cond.period
@@ -1063,10 +1069,11 @@
     const isRoc = isRocType(type);
     const isEma = isEmaType(type);
     const isKeltner = isKeltnerType(type);
+    const isDown = isConsecDownType(type);
     row.querySelector(".cond-window").hidden = !conditionNeedsWindow(type);
     row.querySelector(".cond-stack").hidden = type !== "ma_stack";
     row.querySelector(".cond-k").hidden = !(isRel || isKeltner);
-    row.querySelector(".cond-n").hidden = !(isRel || isRsi || isStreak || isWillr || isNr || isDon || isClose || isRoc || isEma || isKeltner);
+    row.querySelector(".cond-n").hidden = !(isRel || isRsi || isStreak || isWillr || isNr || isDon || isClose || isRoc || isEma || isKeltner || isDown);
     row.querySelector(".cond-period").hidden = !isStreak;
     row.querySelector(".cond-slow").hidden = !isEma;
     const threshold = row.querySelector(".cond-threshold");
@@ -1092,7 +1099,7 @@
     }
     const n = row.querySelector(".cond-n");
     if (isRel) n.placeholder = "N";
-    else if (isStreak || isWillr || isNr) n.placeholder = "N";
+    else if (isStreak || isWillr || isNr || isDown) n.placeholder = "N";
     else if (isRsi || isRoc) n.placeholder = "period";
     else if (type === "donchian_high") n.placeholder = "N";
     else if (type === "donchian_low") n.placeholder = "M";
@@ -1112,6 +1119,7 @@
     if (isEma) n.title = "Fast EMA span";
     else if (isNr) n.title = "Narrow-range N. Today's high minus low equals the minimum of the last N bars, including today. 7 is NR7. Ties count. A zero range does not fire. This is not true range.";
     else if (isWillr) n.title = "Williams %R lookback N. The window includes today's high, low, and close. The public pattern uses 7.";
+    else if (isDown) n.title = "Consecutive down closes N. Each close is strictly below the prior close. N=3 is the overnight SPY/QQQ preset. The fill is that close, then the next open.";
     else if (isClose) n.title = "Sessions N. Today's close is the min or max of the last N closes, including today.";
     else if (isStreak) {
       n.title = "Consecutive bars N. Each bar's RSI is strictly below (falling) or above (rising) the previous RSI. An equal RSI breaks the streak. Not a z-score.";
@@ -1132,6 +1140,7 @@
     if (defaults.slow != null) row.querySelector(".cond-slow").value = defaults.slow;
     if (defaults.keltner_len != null) n.value = defaults.keltner_len;
     if (defaults.atr_mult != null) row.querySelector(".cond-k").value = defaults.atr_mult;
+    if (isConsecDownType(type) && defaults.n != null) n.value = defaults.n;
   }
 
   function readRequiredNumber(input, label) {
@@ -1216,6 +1225,11 @@
             keltner_len: readRequiredInt(row.querySelector(".cond-n"), which + " length"),
             atr_mult: readRequiredNumber(row.querySelector(".cond-k"), which + " ATR multiplier"),
           });
+        } else if (isConsecDownType(type)) {
+          conditions.push({
+            type,
+            n: readRequiredInt(row.querySelector(".cond-n"), "Consecutive down closes N"),
+          });
         } else {
           conditions.push({ type, window: Number(row.querySelector(".cond-window").value) });
         }
@@ -1224,6 +1238,18 @@
     });
     const trail = readTrailPct();
     if (trail != null) rules.trail_pct = trail;
+    // The pure N-down long is the overnight book. Mixed rules stay unmarked
+    // so the server rejects them instead of filling them next-open.
+    const long = rules.long.conditions;
+    if (
+      trail == null &&
+      long.length === 1 &&
+      long[0].type === "consec_down_n" &&
+      rules.flat.conditions.length === 0 &&
+      rules.short.conditions.length === 0
+    ) {
+      rules.book = "overnight";
+    }
     return rules;
   }
 
@@ -1418,6 +1444,20 @@
       rules: {
         long: { logic: "AND", conditions: [{ type: "keltner_below", keltner_len: 10, atr_mult: 2.0 }] },
         flat: { logic: "OR", conditions: [{ type: "keltner_above", keltner_len: 10, atr_mult: 2.0 }] },
+        short: { logic: "AND", conditions: [] },
+      },
+    },
+    {
+      id: "consecDown",
+      label: "Overnight 3 down (SPY/QQQ)",
+      book: "overnight",
+      description:
+        "Overnight hold, SPY and QQQ only. Long when the close has fallen for 3 consecutive sessions (each close strictly below the prior close). Buy that third close. Sell the next session's open. This is not a next-open entry and it does not run on the Top-50 board. N=3. An equal close breaks the streak.",
+      filled: "Overnight 3-down filled (N=3, buy the close, sell the next open). SPY or QQQ only. Save to keep it.",
+      rules: {
+        book: "overnight",
+        long: { logic: "AND", conditions: [{ type: "consec_down_n", n: 3 }] },
+        flat: { logic: "AND", conditions: [] },
         short: { logic: "AND", conditions: [] },
       },
     },
@@ -1867,6 +1907,13 @@
         renderRules(presetRules(which));
         const pattern = patternById(which);
         setTrailPct(pattern && pattern.trail_pct != null ? pattern.trail_pct : "");
+        if (pattern && pattern.book === "overnight") {
+          const sym = $("stSymbol");
+          const cur = (sym && sym.value ? sym.value : "").trim().toUpperCase();
+          if (sym && cur !== "SPY" && cur !== "QQQ") sym.value = "SPY";
+          const tf = $("stTimeframe");
+          if (tf) tf.value = "daily";
+        }
         setHint("stStatus", (pattern && pattern.filled) || "Preset filled");
       });
     }

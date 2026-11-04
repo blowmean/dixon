@@ -119,6 +119,15 @@ short and no trail. A close between the lower band and the mid (inclusive)
 fires neither side, so an open long is held until the close is back above
 the mid. The length and multiplier are caller knobs. They are not fitted on
 the overnight Top-50 board, and `s1-board-v1` does not include this pattern.
+Williams %R, NR7, and Keltner all fill at the next open.
+
+`consec_down_n` is not a next-open predicate. It is the overnight book:
+each of the last N closes is strictly below the prior close (default N=3).
+The book buys that close and sells the next open. It is long-only, has no
+flat rule and no trail, and is rejected on any other shape so the fill
+cannot be reused by RSI, relative volume, Donchian, Williams %R, NR7,
+Keltner, or the other next-open rules. The symbol check (SPY and QQQ,
+daily) lives with the backtest.
 """
 
 from __future__ import annotations
@@ -168,6 +177,11 @@ EMA_SLOW_DEFAULT = 21
 # multiple. Not fitted on the Top-50 board; s1-board-v1 does not use it.
 KELTNER_LEN_DEFAULT = 6
 KELTNER_ATR_MULT_DEFAULT = 1.3
+# Public overnight book. N counts strict down closes (3 means
+# close_t < close_{t-1} < close_{t-2} < close_{t-3}). The fill is not
+# the next-open path: buy this close, sell the next open. SPY and QQQ only.
+CONSEC_DOWN_N_DEFAULT = 3
+OVERNIGHT_BOOK = "overnight"
 # Filled by the ROC(7) public pattern. Omitted `trail_pct` means no stop.
 K2_TRAIL_PCT_DEFAULT = 5.0
 TRAIL_PCT_MAX = 100.0
@@ -203,6 +217,7 @@ _TYPES = _WINDOWED | {
     "ema_lt_ema",
     "keltner_below",
     "keltner_above",
+    "consec_down_n",
 }
 _SIDES = ("long", "flat", "short")
 
@@ -430,11 +445,21 @@ def validate_rules(rules: Any) -> dict[str, Any]:
                     _ATR_MULT_MAX,
                     lo_exclusive=True,
                 )
+            elif ctype == "consec_down_n":
+                item["n"] = _as_int_in(
+                    _present(cond, "n", CONSEC_DOWN_N_DEFAULT),
+                    f"{side} consec_down_n n",
+                    _LOOKBACK_MIN,
+                    _LOOKBACK_MAX,
+                )
             conds.append(item)
         out[side] = {"logic": logic, "conditions": conds}
     trail = _canonical_trail(rules)
     if trail is not None:
         out["trail_pct"] = trail
+    book = _canonical_book(rules, out)
+    if book is not None:
+        out["book"] = book
     return out
 
 
@@ -452,6 +477,65 @@ def _canonical_trail(rules: dict[str, Any]) -> float | None:
         TRAIL_PCT_MAX,
         lo_exclusive=True,
     )
+
+
+def _canonical_book(rules: dict[str, Any], out: dict[str, Any]) -> str | None:
+    """Overnight book, or None when the strategy stays on the next-open path.
+
+    Missing and null both mean next-open, so older rules stay canonical.
+    `consec_down_n` is legal only on this book, and this book is legal only
+    as a single long `consec_down_n` with empty flat and short and no trail.
+    That keeps the close→next-open fill off every other predicate.
+    """
+    raw = rules.get("book", None)
+    if isinstance(raw, str):
+        key = raw.strip().lower()
+    else:
+        key = None if raw is None else raw
+    if key in (None, ""):
+        if _uses_consec_down(out):
+            raise ValueError(
+                "consec_down_n is the overnight book (buy the close, sell the next open, "
+                "SPY and QQQ). It does not fill on the next-open path"
+            )
+        return None
+    if key != OVERNIGHT_BOOK:
+        raise ValueError("book must be overnight")
+    if "trail_pct" in out:
+        raise ValueError("overnight book does not take a trail")
+    long = out["long"]["conditions"]
+    if (
+        out["long"]["logic"] != "AND"
+        or len(long) != 1
+        or long[0]["type"] != "consec_down_n"
+    ):
+        raise ValueError("overnight book is long consec_down_n only")
+    if out["flat"]["conditions"] or out["short"]["conditions"]:
+        raise ValueError(
+            "overnight book exits at the next open, not a flat or short rule"
+        )
+    return OVERNIGHT_BOOK
+
+
+def _uses_consec_down(rules: dict[str, Any]) -> bool:
+    for side in _SIDES:
+        for cond in rules.get(side, {}).get("conditions", []):
+            if cond.get("type") == "consec_down_n":
+                return True
+    return False
+
+
+def overnight_consec_down_rules(n: int = CONSEC_DOWN_N_DEFAULT) -> dict[str, Any]:
+    """Public overnight book before canonicalisation. N=3 is the locked preset."""
+    return {
+        "book": OVERNIGHT_BOOK,
+        "long": {
+            "logic": "AND",
+            "conditions": [{"type": "consec_down_n", "n": n}],
+        },
+        "flat": {"logic": "AND", "conditions": []},
+        "short": {"logic": "AND", "conditions": []},
+    }
 
 
 def windows_used(rules: dict[str, Any]) -> list[int]:
@@ -483,6 +567,7 @@ def signal_requirements(rules: dict[str, Any]) -> dict[str, Any]:
     roc: set[int] = set()
     ema: set[int] = set()
     keltner: set[tuple[int, float]] = set()
+    consec_down: set[int] = set()
     needs_spike = False
     for side in _SIDES:
         for cond in rules.get(side, {}).get("conditions", []):
@@ -514,6 +599,8 @@ def signal_requirements(rules: dict[str, Any]) -> dict[str, Any]:
                 ema.add(int(cond["slow"]))
             elif ctype in {"keltner_below", "keltner_above"}:
                 keltner.add((int(cond["keltner_len"]), float(cond["atr_mult"])))
+            elif ctype == "consec_down_n":
+                consec_down.add(int(cond["n"]))
             elif ctype == "top50_spike":
                 needs_spike = True
     return {
@@ -530,6 +617,7 @@ def signal_requirements(rules: dict[str, Any]) -> dict[str, Any]:
         "roc_periods": sorted(roc),
         "ema_spans": sorted(ema),
         "keltner": [[length, mult] for length, mult in sorted(keltner)],
+        "consec_down": sorted(consec_down),
         "needs_spike": needs_spike,
     }
 
@@ -564,6 +652,8 @@ class SignalView:
     # (keltner_len, atr_mult) → lower band, and the EMA of typical price.
     keltner_lower: dict[tuple[int, float], float | None] = field(default_factory=dict)
     keltner_mid: dict[tuple[int, float], float | None] = field(default_factory=dict)
+    # n → 1.0 when each of the last n closes was strictly below the prior close.
+    consec_down: dict[int, float | None] = field(default_factory=dict)
 
 
 def condition_true(cond: dict[str, Any], view: SignalView) -> bool:
@@ -663,6 +753,9 @@ def condition_true(cond: dict[str, Any], view: SignalView) -> bool:
             and _finite(level)
             and float(view.close) > float(level)
         )
+    if ctype == "consec_down_n":
+        flag = view.consec_down.get(int(cond["n"]))
+        return flag is not None and flag == 1.0
     return False
 
 

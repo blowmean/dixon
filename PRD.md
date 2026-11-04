@@ -140,6 +140,7 @@ Strategy conditions, same CRUD and next-open backtest. Knobs live on each condit
 | `rsi_falling_n` / `rsi_rising_n` | period 14, N=3 | Wilder RSI strictly fell or rose versus the prior bar on each of the last N closes. Slope, not a z-score of RSI (S1-K16 is not this row) and not the threshold tests |
 | `willr_lte` / `willr_gte` | N=7, threshold −95 / −5, inclusive ≤ / ≥ | Williams %R over the last N highs and lows, including today: (highest high − close) / (highest high − lowest low) × −100. Public book is the StatOasis scout cell. Williams %R(14) classic (−80 / −20) is a second preset. Not an overnight-grid cell |
 | `nr_n` | N=7, inclusive, zero range excluded | Today's high−low equals the minimum high−low of the last N bars, including today. Ties count. A zero range is false. Not true range. Public NR7 is long on that rank and flat when close > the prior bar's high. No trail. Not an overnight-grid cell |
+| `consec_down_n` | N=3 | Overnight book, not a next-open predicate. Each of the last N closes is strictly below the prior close. Buy that close, sell the next open. Public preset is daily SPY and QQQ only. Not a Top-50 cell |
 | `donchian_high` / `donchian_low` | N=20 / M=10 | close > prior N-bar high, or close < prior M-bar low |
 | `close_lowest` / `close_highest` | N=7 | close equals the min or max close of the last N bars, including today. Connors Double Seven ANDs the low with close > SMA(200) and exits on the high. No trail. Not Donchian |
 | `roc_gte` / `roc_lte` | period 7, threshold +1% / −1% | ROC(period) in percent points versus the close `period` bars ago. Same single-name AND/OR stack as the rows above |
@@ -148,6 +149,10 @@ Strategy conditions, same CRUD and next-open backtest. Knobs live on each condit
 | `trail_pct` | off unless set; ROC pattern uses 5 | trailing stop, percent from the peak high (long) or trough low (short) since entry. Close-confirmed; fill is still the next open. The EMA pattern and the Keltner pattern do not set it |
 
 Not in this slice: Minervini RS rank, cross-sectional momentum, a shared multi-name book, ATR stops (the Keltner row is a channel, not a stop), walk-forward holdout, HK on the overnight board, an RSI z-score (S1-K16; the level versus its own mean, which is not `rsi_falling_n`). HK/US v1.2 cost defaults are unchanged. The overnight grid is unchanged (`s1-board-v1`, 25 cells). Williams %R, narrow range N, and Keltner are single-name predicates and public patterns; none of them is a `s1-board-v1` cell.
+
+### Overnight 3 down (SPY / QQQ)
+
+Separate from both the next-open single-name engine and from grid `s1-board-v1`. `consec_down_n` with N=3 is long when each of the last three closes is strictly below the prior close. The fill buys that third close and sells the next session's open. Universe is daily SPY and QQQ only. Costs are US v1.2 defaults when the backtest omits overrides. The rule is rejected on any other shape, so the close fill cannot attach to RSI, relative volume, Donchian, Williams %R, NR7, Keltner, or the other next-open predicates. The Top-50 grid stays 25 cells and does not score this book.
 
 ### Overnight US Top-50 board (grid `s1-board-v1`)
 
