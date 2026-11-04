@@ -144,9 +144,10 @@ Strategy conditions, same CRUD and next-open backtest. Knobs live on each condit
 | `close_lowest` / `close_highest` | N=7 | close equals the min or max close of the last N bars, including today. Connors Double Seven ANDs the low with close > SMA(200) and exits on the high. No trail. Not Donchian |
 | `roc_gte` / `roc_lte` | period 7, threshold +1% / −1% | ROC(period) in percent points versus the close `period` bars ago. Same single-name AND/OR stack as the rows above |
 | `ema_gt_ema` / `ema_lt_ema` | fast 9, slow 21 | EMA(fast) above or below EMA(slow). Stack state, not a one-bar cross. Spans are 1–500 and are not the SMA menu. Volume confirm is a separate `rel_volume` on the same side; the public pattern uses k=1.5, N=20 |
-| `trail_pct` | off unless set; ROC pattern uses 5 | trailing stop, percent from the peak high (long) or trough low (short) since entry. Close-confirmed; fill is still the next open. The EMA pattern does not set it |
+| `keltner_below` / `keltner_above` | length 6, ATR mult 1.3 | close below the lower Keltner band, or close above the EMA-typical mid. Bands are mid ± Wilder ATR(length) × mult. Long-only public pattern, no trail. Not Bollinger, not Donchian, not an ATR stop. Length and multiplier stay configurable and are not fitted on the Top-50 |
+| `trail_pct` | off unless set; ROC pattern uses 5 | trailing stop, percent from the peak high (long) or trough low (short) since entry. Close-confirmed; fill is still the next open. The EMA pattern and the Keltner pattern do not set it |
 
-Not in this slice: Minervini RS rank, cross-sectional momentum, a shared multi-name book, ATR stops, walk-forward holdout, HK on the overnight board, an RSI z-score (S1-K16; the level versus its own mean, which is not `rsi_falling_n`). HK/US v1.2 cost defaults are unchanged. The overnight grid is unchanged. Williams %R and narrow range N are single-name predicates and public patterns; neither is a `s1-board-v1` cell.
+Not in this slice: Minervini RS rank, cross-sectional momentum, a shared multi-name book, ATR stops (the Keltner row is a channel, not a stop), walk-forward holdout, HK on the overnight board, an RSI z-score (S1-K16; the level versus its own mean, which is not `rsi_falling_n`). HK/US v1.2 cost defaults are unchanged. The overnight grid is unchanged (`s1-board-v1`, 25 cells). Williams %R, narrow range N, and Keltner are single-name predicates and public patterns; none of them is a `s1-board-v1` cell.
 
 ### Overnight US Top-50 board (grid `s1-board-v1`)
 

@@ -1,5 +1,8 @@
 """Compute and cache technical indicators (MA, EMA, RSI, MACD, Bollinger).
 
+ATR and Keltner channels are strategy-predicate helpers. They are computed
+from the backtest's OHLC and are not written to `indicator_cache`.
+
 Formulas: see indicators/FORMULAS.md — best-effort vs Yahoo math, NOT TradingView.
 
 Daily defaults are written by the daily job. Any other series, and weekly or
@@ -156,6 +159,107 @@ def series_by_date(dates: pd.Series, values: pd.Series) -> dict:
 def ema(series: pd.Series, span: int) -> pd.Series:
     # adjust=False → recursive EMA matching common Yahoo/Trading platforms seed
     return series.ewm(span=span, adjust=False, min_periods=span).mean()
+
+
+def typical_price(high: pd.Series, low: pd.Series, close: pd.Series) -> pd.Series:
+    """(high + low + close) / 3. The Keltner mid is the EMA of this series."""
+    h = pd.to_numeric(high, errors="coerce")
+    lo = pd.to_numeric(low, errors="coerce")
+    c = pd.to_numeric(close, errors="coerce")
+    return (h + lo + c) / 3.0
+
+
+def true_range(high: pd.Series, low: pd.Series, close: pd.Series) -> pd.Series:
+    """Wilder true range.
+
+    max(high − low, |high − previous close|, |low − previous close|).
+    The first bar has no previous close, so its true range is high − low.
+    """
+    h = pd.to_numeric(high, errors="coerce")
+    lo = pd.to_numeric(low, errors="coerce")
+    c = pd.to_numeric(close, errors="coerce")
+    prev = c.shift(1)
+    parts = pd.concat([(h - lo), (h - prev).abs(), (lo - prev).abs()], axis=1)
+    # skipna so the first bar, whose previous close is missing, keeps high − low.
+    return parts.max(axis=1, skipna=True)
+
+
+def atr(high: pd.Series, low: pd.Series, close: pd.Series, period: int) -> pd.Series:
+    """Wilder ATR: SMA seed of the first `period` true ranges, then RMA.
+
+    The first valid value, at index `period - 1`, is the arithmetic mean of
+    the first `period` true ranges. Each later bar is
+
+        ATR_t = ((period - 1) * ATR_{t-1} + TR_t) / period
+
+    which is Welles Wilder's smoothed average (TradingView `ta.atr` /
+    `ta.rma`). It is not a rolling SMA of true range on every bar, and it
+    is not `ewm(alpha=1/period, adjust=False)`. That ewm seed is what
+    `rsi_wilder` uses; it starts from the first true range, so the two
+    diverge as soon as the true ranges are not constant.
+
+    Fewer than `period` finite true ranges → all missing. A hole in the
+    true-range series drops the average until `period` consecutive finite
+    values can seed it again.
+    """
+    period = int(period)
+    if period < 1:
+        raise ValueError("atr period must be >= 1")
+    tr = true_range(high, low, close)
+    values = tr.to_numpy(dtype=float)
+    out = np.full(len(values), np.nan)
+    n = float(period)
+    i = 0
+    prev = np.nan
+    while i < len(values):
+        if np.isnan(prev):
+            if i + period > len(values):
+                break
+            window = values[i : i + period]
+            if np.isnan(window).any():
+                i += 1
+                continue
+            prev = float(window.mean())
+            out[i + period - 1] = prev
+            i += period
+            continue
+        value = values[i]
+        if np.isnan(value):
+            prev = np.nan
+            i += 1
+            continue
+        prev = (prev * (n - 1.0) + float(value)) / n
+        out[i] = prev
+        i += 1
+    return pd.Series(out, index=tr.index)
+
+
+def keltner_mid(high: pd.Series, low: pd.Series, close: pd.Series, length: int) -> pd.Series:
+    """EMA of typical price. Same `ema` as the chart (`adjust=False`)."""
+    return ema(typical_price(high, low, close), int(length))
+
+
+def keltner_channels(
+    high: pd.Series,
+    low: pd.Series,
+    close: pd.Series,
+    length: int,
+    atr_mult: float,
+) -> tuple[pd.Series, pd.Series, pd.Series, pd.Series]:
+    """Keltner mid, upper, lower, and the Wilder ATR used for the width.
+
+    mid = EMA((high + low + close) / 3, length)
+    upper = mid + ATR(length) × atr_mult
+    lower = mid − ATR(length) × atr_mult
+
+    A bar stays missing until both the EMA and the ATR exist. This is an
+    ATR envelope. It is not `bollinger` (SMA of close ± standard deviation)
+    and not a Donchian channel (prior high / prior low).
+    """
+    mid = keltner_mid(high, low, close, length)
+    width = atr(high, low, close, length)
+    band = width * float(atr_mult)
+    return mid, mid + band, mid - band, width
 
 
 def rsi_wilder(close: pd.Series, period: int = 14) -> pd.Series:

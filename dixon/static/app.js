@@ -72,6 +72,8 @@
     ["roc_lte", "ROC ≤ threshold"],
     ["ema_gt_ema", "EMA fast > slow"],
     ["ema_lt_ema", "EMA fast < slow"],
+    ["keltner_below", "Close < Keltner lower"],
+    ["keltner_above", "Close > Keltner mid"],
   ];
   const PREDICATE_DEFAULTS = {
     rel_volume: { k: 1.5, window: 20 },
@@ -90,6 +92,8 @@
     roc_lte: { period: 7, threshold: -1 },
     ema_gt_ema: { fast: 9, slow: 21 },
     ema_lt_ema: { fast: 9, slow: 21 },
+    keltner_below: { keltner_len: 6, atr_mult: 1.3 },
+    keltner_above: { keltner_len: 6, atr_mult: 1.3 },
   };
 
   function $(id) {
@@ -960,6 +964,10 @@
     return type === "ema_gt_ema" || type === "ema_lt_ema";
   }
 
+  function isKeltnerType(type) {
+    return type === "keltner_below" || type === "keltner_above";
+  }
+
   function formatStack(cond) {
     const op = (cond.direction || "up") === "down" ? "<" : ">";
     return (cond.windows || []).join(op);
@@ -1014,18 +1022,23 @@
         ).join("");
         const lookback = isEmaType(cond.type)
           ? cond.fast
-          : (isRsiStreakType(cond.type)
-            ? cond.n
-            : (isRsiType(cond.type) || isRocType(cond.type) || isWillrType(cond.type)
-              ? cond.period
-              : (isDonchianType(cond.type) || isCloseExtremeType(cond.type) || isNrType(cond.type) || cond.type === "rel_volume" ? cond.window : "")));
+          : (isKeltnerType(cond.type)
+            ? cond.keltner_len
+            : (isRsiStreakType(cond.type)
+              ? cond.n
+              : (isRsiType(cond.type) || isRocType(cond.type) || isWillrType(cond.type)
+                ? cond.period
+                : (isDonchianType(cond.type) || isCloseExtremeType(cond.type) || isNrType(cond.type) || cond.type === "rel_volume" ? cond.window : ""))));
+        const kValue = cond.type === "rel_volume"
+          ? cond.k
+          : (isKeltnerType(cond.type) ? cond.atr_mult : "");
         const showThreshold = isRsiType(cond.type) || isRocType(cond.type) || isWillrType(cond.type);
         const streakPeriod = isRsiStreakType(cond.type) && cond.period != null ? cond.period : "";
         row.innerHTML =
           `<select class="cond-type">${typeOpts}</select>` +
           `<select class="cond-window">${winOpts}</select>` +
           `<input class="cond-stack" type="text" placeholder="5>20>50" value="${esc(cond.type === "ma_stack" ? formatStack(cond) : "")}" />` +
-          `<input class="cond-k" type="number" step="0.1" min="0.1" placeholder="k" title="Volume multiple k" value="${esc(cond.type === "rel_volume" ? cond.k : "")}" />` +
+          `<input class="cond-k" type="number" step="0.1" min="0.1" placeholder="k" title="Volume multiple k" value="${esc(kValue)}" />` +
           `<input class="cond-n" type="number" step="1" min="1" placeholder="N" title="Lookback N, RSI period, or ROC period" value="${esc(lookback == null ? "" : lookback)}" />` +
           `<input class="cond-period" type="number" step="1" min="1" max="250" placeholder="period" title="Wilder RSI period. 14 is the chart RSI. This is not a z-score window." value="${esc(streakPeriod)}" />` +
           `<input class="cond-slow" type="number" step="1" min="1" max="500" placeholder="slow" title="Slow EMA span" value="${esc(isEmaType(cond.type) && cond.slow != null ? cond.slow : "")}" />` +
@@ -1049,10 +1062,11 @@
     const isClose = isCloseExtremeType(type);
     const isRoc = isRocType(type);
     const isEma = isEmaType(type);
+    const isKeltner = isKeltnerType(type);
     row.querySelector(".cond-window").hidden = !conditionNeedsWindow(type);
     row.querySelector(".cond-stack").hidden = type !== "ma_stack";
-    row.querySelector(".cond-k").hidden = !isRel;
-    row.querySelector(".cond-n").hidden = !(isRel || isRsi || isStreak || isWillr || isNr || isDon || isClose || isRoc || isEma);
+    row.querySelector(".cond-k").hidden = !(isRel || isKeltner);
+    row.querySelector(".cond-n").hidden = !(isRel || isRsi || isStreak || isWillr || isNr || isDon || isClose || isRoc || isEma || isKeltner);
     row.querySelector(".cond-period").hidden = !isStreak;
     row.querySelector(".cond-slow").hidden = !isEma;
     const threshold = row.querySelector(".cond-threshold");
@@ -1084,12 +1098,25 @@
     else if (type === "donchian_low") n.placeholder = "M";
     else if (isClose) n.placeholder = "N";
     else if (isEma) n.placeholder = "fast";
+    else if (isKeltner) n.placeholder = "len";
+    const mult = row.querySelector(".cond-k");
+    if (isKeltner) {
+      mult.placeholder = "mult";
+      mult.title = "ATR multiplier. Bands are the EMA of typical price ± Wilder ATR × this. Public default is 1.3. Not a standard-deviation multiple.";
+      mult.max = "100";
+    } else {
+      mult.placeholder = "k";
+      mult.title = "Volume multiple k";
+      mult.removeAttribute("max");
+    }
     if (isEma) n.title = "Fast EMA span";
     else if (isNr) n.title = "Narrow-range N. Today's high minus low equals the minimum of the last N bars, including today. 7 is NR7. Ties count. A zero range does not fire. This is not true range.";
     else if (isWillr) n.title = "Williams %R lookback N. The window includes today's high, low, and close. The public pattern uses 7.";
     else if (isClose) n.title = "Sessions N. Today's close is the min or max of the last N closes, including today.";
     else if (isStreak) {
       n.title = "Consecutive bars N. Each bar's RSI is strictly below (falling) or above (rising) the previous RSI. An equal RSI breaks the streak. Not a z-score.";
+    } else if (isKeltner) {
+      n.title = "Keltner length. EMA of typical price (high+low+close)/3 and Wilder ATR both use this. Public default is 6.";
     } else n.title = "Lookback N, RSI period, or ROC period";
     if (!fillDefaults) return;
     const defaults = PREDICATE_DEFAULTS[type];
@@ -1103,6 +1130,8 @@
     if (defaults.threshold != null) row.querySelector(".cond-threshold").value = defaults.threshold;
     if (defaults.fast != null) n.value = defaults.fast;
     if (defaults.slow != null) row.querySelector(".cond-slow").value = defaults.slow;
+    if (defaults.keltner_len != null) n.value = defaults.keltner_len;
+    if (defaults.atr_mult != null) row.querySelector(".cond-k").value = defaults.atr_mult;
   }
 
   function readRequiredNumber(input, label) {
@@ -1179,6 +1208,13 @@
             type,
             fast: readRequiredInt(row.querySelector(".cond-n"), "EMA fast span"),
             slow: readRequiredInt(row.querySelector(".cond-slow"), "EMA slow span"),
+          });
+        } else if (isKeltnerType(type)) {
+          const which = type === "keltner_below" ? "Keltner lower" : "Keltner mid";
+          conditions.push({
+            type,
+            keltner_len: readRequiredInt(row.querySelector(".cond-n"), which + " length"),
+            atr_mult: readRequiredNumber(row.querySelector(".cond-k"), which + " ATR multiplier"),
           });
         } else {
           conditions.push({ type, window: Number(row.querySelector(".cond-window").value) });
@@ -1358,6 +1394,30 @@
       rules: {
         long: { logic: "AND", conditions: [{ type: "nr_n", window: 7 }] },
         flat: { logic: "OR", conditions: [{ type: "donchian_high", window: 1 }] },
+        short: { logic: "AND", conditions: [] },
+      },
+    },
+    {
+      id: "keltner",
+      label: "Keltner MR 6/1.3",
+      description:
+        "Keltner mean reversion, not Bollinger and not Donchian. The mid is the EMA of typical price (high+low+close)/3, length 6. Bands are that mid ± Wilder ATR(6) × 1.3. Long when the close is below the lower band. Exit when the close is above the mid. Long only; no short and no trailing stop. Fills at the next open. A close on the band does not fire. Params: length 6, ATR multiplier 1.3.",
+      filled: "Keltner MR filled (EMA of typical price 6, Wilder ATR(6) × 1.3). Long below the lower band, flat above the mid. Save to keep it.",
+      rules: {
+        long: { logic: "AND", conditions: [{ type: "keltner_below", keltner_len: 6, atr_mult: 1.3 }] },
+        flat: { logic: "OR", conditions: [{ type: "keltner_above", keltner_len: 6, atr_mult: 1.3 }] },
+        short: { logic: "AND", conditions: [] },
+      },
+    },
+    {
+      id: "keltner10",
+      label: "Keltner 10/2",
+      description:
+        "Secondary Keltner preset, not the Public default. The Public pattern stays length 6 and ATR multiplier 1.3. This one uses length 10 and ATR multiplier 2.0: EMA of typical price (high+low+close)/3 ± Wilder ATR(10) × 2.0. Long when the close is below the lower band. Exit when the close is above the mid. Long only, no trail, next-open fill. Not Bollinger and not Donchian.",
+      filled: "Keltner 10/2 filled (secondary, not the Public 6/1.3 default). Save to keep it.",
+      rules: {
+        long: { logic: "AND", conditions: [{ type: "keltner_below", keltner_len: 10, atr_mult: 2.0 }] },
+        flat: { logic: "OR", conditions: [{ type: "keltner_above", keltner_len: 10, atr_mult: 2.0 }] },
         short: { logic: "AND", conditions: [] },
       },
     },

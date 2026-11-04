@@ -32,10 +32,11 @@ from typing import Any
 import duckdb
 
 from dixon.compute_indicators import (
+    bar_range,
     ema,
     ensure_indicators,
     indicator_map,
-    bar_range,
+    keltner_channels,
     load_ohlc,
     prior_high,
     prior_low,
@@ -318,6 +319,20 @@ def run_backtest(
         span: series_by_date(bars["bar_date"], ema(bars["close"], span))
         for span in reqs["ema_spans"]
     } if not bars.empty else {}
+    # Full history. A window that starts after warm-up still sees the EMA of
+    # typical price and the Wilder ATR seeded from earlier bars. The mid does
+    # not depend on atr_mult; the lower band does. Not Bollinger, not Donchian.
+    keltner_pairs = [(int(length), float(mult)) for length, mult in reqs["keltner"]]
+    keltner_lower_maps: dict[tuple[int, float], dict] = {}
+    keltner_mid_maps: dict[tuple[int, float], dict] = {}
+    if not bars.empty:
+        for length, mult in keltner_pairs:
+            mid_s, _upper, lower_s, _atr = keltner_channels(
+                bars["high"], bars["low"], bars["close"], length, mult
+            )
+            key = (length, mult)
+            keltner_lower_maps[key] = series_by_date(bars["bar_date"], lower_s)
+            keltner_mid_maps[key] = series_by_date(bars["bar_date"], mid_s)
     # Same Wilder RSI as RSI_{period} (`rsi_wilder`). The flag is the slope
     # run, not a z-score of that level. Full history, so a window that starts
     # after warm-up still sees streaks seeded from earlier bars.
@@ -444,6 +459,12 @@ def run_backtest(
                     },
                     roc={p: roc_maps[p].get(bar_date) for p in reqs["roc_periods"]},
                     emas={span: ema_maps[span].get(bar_date) for span in reqs["ema_spans"]},
+                    keltner_lower={
+                        pair: keltner_lower_maps[pair].get(bar_date) for pair in keltner_pairs
+                    },
+                    keltner_mid={
+                        pair: keltner_mid_maps[pair].get(bar_date) for pair in keltner_pairs
+                    },
                 ),
                 book.side_of(symbol),
             )

@@ -113,6 +113,8 @@ Population std (`ddof=0`) over the same window as the middle band:
 
 Cached names: `BB_MID_20_2`, `BB_UPPER_20_2`, `BB_LOWER_20_2`.
 
+Keltner channels are not these bands. They are an EMA of typical price ± Wilder ATR, evaluated as strategy predicates (`keltner_below` / `keltner_above`). They are not written to `indicator_cache`, and they do not use `%B` or BandWidth.
+
 ---
 
 ## Weekly / monthly bar rollup (for QA of W/M consistency)
@@ -315,6 +317,48 @@ R_t = H_t - L_t
 The signal is the completed bar. There is no opening-range breakout and no intraday stop at the narrow bar's high or low. The fill is the next stored bar's open.
 
 The StatOasis NR7 notes rank this same high-low and then exit after a fixed number of bars. This book has no hold-N-bars condition, so that exit is not the public pattern. Crabel's opening-range breakout is not this book either. The public pattern is `nr_n` \(N=7\) on `long`, and `donchian_high` window **1** on `flat` (the close is above the prior bar's high). No `trail_pct`. Long beats flat, so a bar that is both NR7 and a close above yesterday's high still enters; the exit waits for a later bar. While neither side is true the open position is held. US/HK cost defaults are unchanged. The overnight `s1-board-v1` grid does not include the pattern.
+
+### Keltner channel — `keltner_below` / `keltner_above`
+
+ATR envelope around an EMA of typical price. Not Bollinger (SMA of close ± population standard deviation) and not Donchian (prior high / prior low). The signal bar's high, low, and close all enter. Volume does not.
+
+\[
+\mathrm{TP}_t = \frac{H_t + L_t + C_t}{3}
+\]
+\[
+\mathrm{Mid}_t = \mathrm{EMA}_n(\mathrm{TP})_t
+\]
+
+The mid uses the same recursive EMA as `EMA_{n}` (`ewm(span=n, adjust=False, min_periods=n)`). It is not an SMA of typical price and not an SMA of close.
+
+True range, then Welles Wilder ATR. The first bar has no previous close, so \(\mathrm{TR} = H - L\). Later bars:
+
+\[
+\mathrm{TR}_t = \max\left(H_t - L_t,\ |H_t - C_{t-1}|,\ |L_t - C_{t-1}|\right)
+\]
+
+\[
+\mathrm{ATR}^{(n)}_t =
+\begin{cases}
+\frac{1}{n}\sum_{i=0}^{n-1} \mathrm{TR}_{t-i} & \text{first valid bar, after } n \text{ true ranges} \\[6pt]
+\frac{(n-1)\,\mathrm{ATR}^{(n)}_{t-1} + \mathrm{TR}_t}{n} & \text{thereafter}
+\end{cases}
+\]
+
+That seed is the SMA of the first \(n\) true ranges, then Wilder's RMA (TradingView `ta.atr` / `ta.rma`). It is **not** `ewm(alpha=1/n, adjust=False)`. The RSI smoother in this file uses that ewm seed; ATR does not. The two print the same number only while true range is constant. It is also not a rolling SMA of true range on every later bar.
+
+\[
+\mathrm{Upper}_t = \mathrm{Mid}_t + m \cdot \mathrm{ATR}^{(n)}_t,\quad
+\mathrm{Lower}_t = \mathrm{Mid}_t - m \cdot \mathrm{ATR}^{(n)}_t
+\]
+
+- `keltner_below`: \(C_t < \mathrm{Lower}_t\). Defaults: \(n = 6\), \(m = 1.3\).
+- `keltner_above`: \(C_t > \mathrm{Mid}_t\). Same defaults. This is the mid, not the upper band.
+- One `keltner_len` drives both the EMA and the ATR. `atr_mult` is the ATR multiple \(m\), greater than 0 and at most 100. Length is an integer from 1 to 500.
+- A close equal to the lower band, or equal to the mid, is false. Warm-up (EMA or ATR missing) is false.
+- The same length and multiplier cannot be both below the lower band and above the mid, so a long entry and the flat exit do not fight. A close between them, inclusive of both lines, fires neither predicate, and an open long is held.
+- The public pattern is `keltner_below` on `long` and `keltner_above` on `flat`, both with length **6** and multiplier **1.3**. Short is empty. No `trail_pct`. The fill is the next bar's open. A secondary length-10 / multiplier-2.0 preset is not the public default.
+- These knobs are not fitted on the overnight Top-50 board. Grid `s1-board-v1` does not grow a Keltner cell.
 
 ### Trailing stop — `trail_pct`
 

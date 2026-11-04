@@ -1,0 +1,182 @@
+{
+  "atr": "wilder-sma-seed",
+  "atr_mult": 1.3,
+  "book": "long keltner_below / flat keltner_above",
+  "closed_pnl": 301.700405,
+  "costs": "us-v1.2-defaults",
+  "end": "2024-01-23",
+  "keltner_len": 6,
+  "note": "ATR envelope, not Bollinger and not Donchian",
+  "result": {
+    "currency": "USD",
+    "equity_curve": [
+      {
+        "cash": 100000.0,
+        "date": "2024-01-02",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-01-03",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-01-04",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-01-05",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-01-06",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-01-07",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-01-08",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-01-09",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-01-10",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-01-11",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-01-12",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-01-13",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-01-14",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-01-15",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-01-16",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-01-17",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-01-18",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 79988.987854,
+        "date": "2024-01-19",
+        "equity": 100029.473684,
+        "side": "long"
+      },
+      {
+        "cash": 79988.987854,
+        "date": "2024-01-20",
+        "equity": 100069.959514,
+        "side": "long"
+      },
+      {
+        "cash": 79988.987854,
+        "date": "2024-01-21",
+        "equity": 100312.874494,
+        "side": "long"
+      },
+      {
+        "cash": 100301.700405,
+        "date": "2024-01-22",
+        "equity": 100301.700405,
+        "side": "flat"
+      },
+      {
+        "cash": 100301.700405,
+        "date": "2024-01-23",
+        "equity": 100301.700405,
+        "side": "flat"
+      }
+    ],
+    "metrics": {
+      "ending_equity": 100301.700405,
+      "max_drawdown": 0.00011139,
+      "max_drawdown_meets_target": true,
+      "max_drawdown_target": 0.1,
+      "total_pnl": 301.700405,
+      "total_return": 0.003017,
+      "trade_count": 1,
+      "win_rate": 1.0,
+      "win_rate_meets_target": true,
+      "win_rate_target": 0.5
+    },
+    "open_position": null,
+    "starting_capital": 100000.0,
+    "trades": [
+      {
+        "entry_commission": 1.012146,
+        "entry_date": "2024-01-19",
+        "entry_price": 98.8,
+        "entry_slippage": 10.0,
+        "exit_commission": 1.012146,
+        "exit_date": "2024-01-22",
+        "exit_price": 100.4,
+        "exit_reason": "signal",
+        "exit_slippage": 10.161943,
+        "notional": 20000.0,
+        "pnl": 301.700405,
+        "return_on_notional": 0.01508502,
+        "shares": 202.4291498,
+        "side": "long",
+        "symbol": "AAPL"
+      }
+    ]
+  },
+  "start": "2024-01-02",
+  "symbol": "AAPL"
+}
