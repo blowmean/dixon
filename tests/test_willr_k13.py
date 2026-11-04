@@ -1,14 +1,16 @@
 """S1-K13: Williams %R threshold predicates.
 
 %R = (highest high − close) / (highest high − lowest low) × −100 over the
-last N bars, including today. `willr_lte` is true at or below a threshold
-(default −80, oversold). `willr_gte` is true at or above one (default −20,
-overbought). A zero high-low range is missing, so the condition is false.
+last N bars, including today. `willr_lte` is true at or below a threshold.
+`willr_gte` is true at or above one. Both compares are inclusive, the same
+shape as `rsi_lte` / `rsi_gte`. A zero high-low range is missing, so the
+condition is false.
 
-The public pattern is long on %R(14) ≤ −80 and flat on %R(14) ≥ −20. The
-band between those lines holds the open side. Fills are the next stored
-open. There is no trail. This is not Donchian (that drops today) and not
-stochastic %K (on a positive range, %R = %K − 100).
+The public pattern is the StatOasis scout cell: long on %R(7) ≤ −95 and
+flat on %R(7) ≥ −5. Exactly −95 is a long. Exactly −5 is an exit. The band
+between those lines holds the open side. Fills are the next stored open.
+There is no trail. Williams %R(14) classic (−80 / −20) is a second preset,
+not the omitted-knob default.
 
 Signal cases use zero costs. The golden reruns the same AAPL tape with the
 default US book. The overnight s1-board-v1 grid does not grow a cell.
@@ -45,7 +47,7 @@ from dixon.strategy_board import GRID_VERSION, grid_cells
 
 STATIC = Path(__file__).resolve().parents[1] / "dixon" / "static"
 ROOT = Path(__file__).resolve().parents[1]
-FIXTURE = Path(__file__).parent / "fixtures" / "willr_n14_aapl.json"
+FIXTURE = Path(__file__).parent / "fixtures" / "willr_n7_aapl.json"
 GOLDEN_START = date(2024, 1, 2)
 
 ZERO_COSTS = {
@@ -71,8 +73,8 @@ def _rules(**sides):
     return rules
 
 
-def _willr(period=14, long_at=-80, exit_at=-20):
-    """Public pattern. Oversold longs, overbought flats. No trail."""
+def _willr(period=7, long_at=-95, exit_at=-5):
+    """Public StatOasis book. Long ≤ −95, flat ≥ −5. No trail."""
     return _rules(
         long={
             "logic": "AND",
@@ -86,30 +88,31 @@ def _willr(period=14, long_at=-80, exit_at=-20):
 
 
 def public_rows():
-    """Thirty AAPL bars for the %R(14) public book.
+    """Twenty-one AAPL bars for the %R(7) ≤ −95 / ≥ −5 public book.
 
-    Bars 0–13 sit in the middle of a 90–110 range. %R is −50 once the
-    window is full, so nothing fires. Bar 14 closes at 92 (−90) and the
-    long fills at bar 15's open, 93, not at 92. Bars 15–17 stay at −50, so
-    the long is held. Bar 18 closes at 107 (−15) and the exit fills at bar
-    19's open, 106, not at 107. The old 110/90 range then rolls out of the
-    window. Bar 28 makes a new low (−96) and the second long fills at bar
-    29's open, 82, and stays open because that bar is the last one.
+    Bars 0–6 sit in the middle of a 0–100 range. %R is −50 once the window
+    is full, so nothing fires. Bar 7 closes at 4 (−96) and the long fills at
+    bar 8's open, 48, not at 4. Bars 8–10 stay at −50, so the long is held.
+    Bar 11 closes at 96 (−4) and the exit fills at bar 12's open, 52, not at
+    96. Later prints of −80 and −83 stay flat: those are classic −80 longs,
+    and they are above −95. Bar 19 closes at 2 and the second long fills at
+    bar 20's open, 46, and stays open because that bar is the last one.
+    Opens sit inside the bar's high and low, so they do not move %R.
     """
     rows: list[tuple[float, float, float, float, int]] = []
-    for _ in range(14):
-        rows.append((100.0, 110.0, 90.0, 100.0, 1_000_000))
-    rows.append((100.0, 100.0, 90.0, 92.0, 1_000_000))
-    rows.append((93.0, 102.0, 93.0, 100.0, 1_000_000))
-    rows.append((100.0, 104.0, 96.0, 100.0, 1_000_000))
-    rows.append((100.0, 103.0, 97.0, 100.0, 1_000_000))
-    rows.append((100.0, 108.0, 100.0, 107.0, 1_000_000))
-    rows.append((106.0, 106.0, 99.0, 100.0, 1_000_000))
-    for _ in range(8):
-        rows.append((100.0, 104.0, 96.0, 100.0, 1_000_000))
-    rows.append((100.0, 100.0, 80.0, 81.0, 1_000_000))
-    rows.append((82.0, 100.0, 82.0, 96.0, 1_000_000))
-    assert len(rows) == 30
+    for _ in range(7):
+        rows.append((50.0, 100.0, 0.0, 50.0, 1_000_000))
+    rows.append((50.0, 50.0, 0.0, 4.0, 1_000_000))
+    rows.append((48.0, 60.0, 8.0, 50.0, 1_000_000))
+    rows.append((50.0, 60.0, 40.0, 50.0, 1_000_000))
+    rows.append((50.0, 60.0, 40.0, 50.0, 1_000_000))
+    rows.append((50.0, 100.0, 50.0, 96.0, 1_000_000))
+    rows.append((52.0, 90.0, 40.0, 50.0, 1_000_000))
+    for _ in range(6):
+        rows.append((50.0, 60.0, 40.0, 50.0, 1_000_000))
+    rows.append((50.0, 50.0, 0.0, 2.0, 1_000_000))
+    rows.append((46.0, 60.0, 12.0, 50.0, 1_000_000))
+    assert len(rows) == 21
     return rows
 
 
@@ -218,16 +221,19 @@ def test_formula_matches_an_independent_window_and_the_stochastic_identity():
     high = pd.Series([r[1] for r in rows], dtype=float)
     low = pd.Series([r[2] for r in rows], dtype=float)
     close = pd.Series([r[3] for r in rows], dtype=float)
-    got = williams_r(high, low, close, 14)
-    _same(got, _oracle(high, low, close, 14))
-    # First thirteen bars are warm-up. Bar 13 is the middle of the range.
-    assert all(pd.isna(v) for v in got.iloc[:13])
-    assert float(got.iloc[13]) == -50.0
-    assert float(got.iloc[14]) == -90.0
-    assert float(got.iloc[18]) == -15.0
+    got = williams_r(high, low, close, 7)
+    _same(got, _oracle(high, low, close, 7))
+    # First six bars are warm-up. Bar 6 is the middle of the range.
+    assert all(pd.isna(v) for v in got.iloc[:6])
+    assert float(got.iloc[6]) == -50.0
+    assert float(got.iloc[7]) == -96.0
+    assert float(got.iloc[11]) == -4.0
+    # −80 is a classic long and is above the scout line.
+    assert float(got.iloc[18]) == -80.0
+    assert float(got.iloc[18]) > -95.0
 
-    hh = high.rolling(14, min_periods=14).max()
-    ll = low.rolling(14, min_periods=14).min()
+    hh = high.rolling(7, min_periods=7).max()
+    ll = low.rolling(7, min_periods=7).min()
     percent_k = (close - ll) / (hh - ll) * 100.0
     identity = percent_k - 100.0
     finite = got.notna()
@@ -286,16 +292,50 @@ def test_hand_period_3_lands_on_the_threshold_lines():
 
 
 def test_bounds_are_inclusive_and_a_missing_value_is_false():
-    lte = {"type": "willr_lte", "period": 14, "threshold": -80.0}
-    gte = {"type": "willr_gte", "period": 14, "threshold": -20.0}
-    assert condition_true(lte, SignalView(close=1, mas={}, mas_prev={}, willr={14: -80.0}))
-    assert condition_true(lte, SignalView(close=1, mas={}, mas_prev={}, willr={14: -100.0}))
-    assert not condition_true(lte, SignalView(close=1, mas={}, mas_prev={}, willr={14: -79.9}))
-    assert condition_true(gte, SignalView(close=1, mas={}, mas_prev={}, willr={14: -20.0}))
-    assert condition_true(gte, SignalView(close=1, mas={}, mas_prev={}, willr={14: 0.0}))
-    assert not condition_true(gte, SignalView(close=1, mas={}, mas_prev={}, willr={14: -20.1}))
-    assert not condition_true(lte, SignalView(close=1, mas={}, mas_prev={}, willr={14: None}))
+    """≤ −95 and ≥ −5. Equality is true. One tick the other way is false."""
+    lte = {"type": "willr_lte", "period": 7, "threshold": -95.0}
+    gte = {"type": "willr_gte", "period": 7, "threshold": -5.0}
+    assert condition_true(lte, SignalView(close=1, mas={}, mas_prev={}, willr={7: -95.0}))
+    assert condition_true(lte, SignalView(close=1, mas={}, mas_prev={}, willr={7: -100.0}))
+    assert not condition_true(lte, SignalView(close=1, mas={}, mas_prev={}, willr={7: -94.9}))
+    assert condition_true(gte, SignalView(close=1, mas={}, mas_prev={}, willr={7: -5.0}))
+    assert condition_true(gte, SignalView(close=1, mas={}, mas_prev={}, willr={7: 0.0}))
+    assert not condition_true(gte, SignalView(close=1, mas={}, mas_prev={}, willr={7: -5.1}))
+    assert not condition_true(lte, SignalView(close=1, mas={}, mas_prev={}, willr={7: None}))
     assert not condition_true(gte, SignalView(close=1, mas={}, mas_prev={}))
+
+
+def test_exact_public_lines_fill_at_the_next_open():
+    """A close that prints exactly −95 is a long. Exactly −94 is not."""
+    start = date(2024, 2, 1)
+    on_the_line = [
+        (50.0, 100.0, 0.0, 5.0, 1_000),
+        (20.0, 100.0, 0.0, 50.0, 1_000),
+    ]
+    just_off = [
+        (50.0, 100.0, 0.0, 6.0, 1_000),
+        (20.0, 100.0, 0.0, 50.0, 1_000),
+    ]
+    assert float(williams_r(pd.Series([100.0]), pd.Series([0.0]), pd.Series([5.0]), 1).iloc[0]) == -95.0
+    assert float(williams_r(pd.Series([100.0]), pd.Series([0.0]), pd.Series([95.0]), 1).iloc[0]) == -5.0
+    assert float(williams_r(pd.Series([100.0]), pd.Series([0.0]), pd.Series([6.0]), 1).iloc[0]) == -94.0
+    con = _insert(on_the_line, start=start)
+    try:
+        hit = _run(con, _willr(period=1), start, start + timedelta(days=1))
+    finally:
+        con.close()
+    assert hit["trades"] == []
+    assert hit["open_position"]["side"] == "long"
+    assert hit["open_position"]["entry_price"] == 20.0
+    assert hit["open_position"]["entry_date"] == _day(start, 1)
+
+    con = _insert(just_off, symbol="MSFT", start=start)
+    try:
+        miss = _run(con, _willr(period=1), start, start + timedelta(days=1), symbol="MSFT")
+    finally:
+        con.close()
+    assert miss["trades"] == []
+    assert miss["open_position"] is None
 
 
 def test_omitted_knobs_default_and_do_not_rewrite_old_rules():
@@ -310,19 +350,19 @@ def test_omitted_knobs_default_and_do_not_rewrite_old_rules():
 
     rules = validate_rules(_willr())
     assert rules["long"]["conditions"] == [
-        {"type": "willr_lte", "period": 14, "threshold": -80.0}
+        {"type": "willr_lte", "period": 7, "threshold": -95.0}
     ]
     assert rules["flat"]["logic"] == "OR"
     assert rules["flat"]["conditions"] == [
-        {"type": "willr_gte", "period": 14, "threshold": -20.0}
+        {"type": "willr_gte", "period": 7, "threshold": -5.0}
     ]
     assert rules["short"]["conditions"] == []
     assert "trail_pct" not in rules
     assert windows_used(rules) == []
-    assert signal_requirements(rules)["willr_periods"] == [14]
-    assert WILLR_PERIOD_DEFAULT == 14
-    assert WILLR_LTE_THRESHOLD_DEFAULT == -80.0
-    assert WILLR_GTE_THRESHOLD_DEFAULT == -20.0
+    assert signal_requirements(rules)["willr_periods"] == [7]
+    assert WILLR_PERIOD_DEFAULT == 7
+    assert WILLR_LTE_THRESHOLD_DEFAULT == -95.0
+    assert WILLR_GTE_THRESHOLD_DEFAULT == -5.0
 
     omitted = validate_rules(
         _rules(
@@ -333,17 +373,25 @@ def test_omitted_knobs_default_and_do_not_rewrite_old_rules():
     assert omitted["long"]["conditions"] == rules["long"]["conditions"]
     assert omitted["flat"]["conditions"] == rules["flat"]["conditions"]
 
-    # 14.0 is an integer period. The threshold stays on the oscillator.
+    # 7.0 is an integer period. The threshold stays on the oscillator.
     coerced = validate_rules(
         _rules(
             long={
                 "logic": "AND",
-                "conditions": [{"type": "willr_lte", "period": 14.0, "threshold": -80}],
+                "conditions": [{"type": "willr_lte", "period": 7.0, "threshold": -95}],
             }
         )
     )
     assert coerced["long"]["conditions"] == [
+        {"type": "willr_lte", "period": 7, "threshold": -95.0}
+    ]
+    # Classic −80 / −20 stays a legal explicit setting. It is not the default.
+    classic = validate_rules(_willr(period=14, long_at=-80, exit_at=-20))
+    assert classic["long"]["conditions"] == [
         {"type": "willr_lte", "period": 14, "threshold": -80.0}
+    ]
+    assert classic["flat"]["conditions"] == [
+        {"type": "willr_gte", "period": 14, "threshold": -20.0}
     ]
     ends = validate_rules(
         _rules(
@@ -399,20 +447,20 @@ def test_public_book_enters_and_exits_at_the_next_open_and_holds_the_middle():
     assert result["metrics"]["trade_count"] == 1
     trade = result["trades"][0]
     assert trade["side"] == "long"
-    assert trade["entry_date"] == _day(start, 15)
-    assert trade["entry_price"] == 93.0
-    assert trade["entry_price"] != rows[14][3]
-    assert trade["exit_date"] == _day(start, 19)
-    assert trade["exit_price"] == 106.0
-    assert trade["exit_price"] != rows[18][3]
+    assert trade["entry_date"] == _day(start, 8)
+    assert trade["entry_price"] == 48.0
+    assert trade["entry_price"] != rows[7][3]
+    assert trade["exit_date"] == _day(start, 12)
+    assert trade["exit_price"] == 52.0
+    assert trade["exit_price"] != rows[11][3]
     assert trade["exit_reason"] == "signal"
-    # Bars 15–17 print −50. The exit is bar 19, so those sessions were held.
-    assert trade["exit_date"] != _day(start, 16)
+    # Bars 8–10 print −50. The exit is bar 12, so those sessions were held.
+    assert trade["exit_date"] != _day(start, 9)
     opened = result["open_position"]
     assert opened["side"] == "long"
-    assert opened["entry_date"] == _day(start, 29)
-    assert opened["entry_price"] == 82.0
-    assert opened["entry_price"] != rows[28][3]
+    assert opened["entry_date"] == _day(start, 20)
+    assert opened["entry_price"] == 46.0
+    assert opened["entry_price"] != rows[19][3]
 
 
 def test_bars_before_the_window_warm_the_lookback():
@@ -421,14 +469,14 @@ def test_bars_before_the_window_warm_the_lookback():
     con = _insert(rows, start=start)
     try:
         end = start + timedelta(days=len(rows) - 1)
-        late = _run(con, _willr(), start + timedelta(days=14), end)
+        late = _run(con, _willr(), start + timedelta(days=7), end)
     finally:
         con.close()
-    # Bar 14 is the first in-range close and already ≤ −80 because bars 0–13 exist.
-    assert late["trades"][0]["entry_date"] == _day(start, 15)
+    # Bar 7 is the first in-range close and already ≤ −95 because bars 0–6 exist.
+    assert late["trades"][0]["entry_date"] == _day(start, 8)
 
-    # The same sixteen bars, stored as their own symbol, have no history before them.
-    tail = rows[14:]
+    # The same tail, stored as its own symbol, has no history before it.
+    tail = rows[7:]
     con = _insert(tail, symbol="MSFT", start=start)
     try:
         cold = _run(con, _willr(), start, start + timedelta(days=len(tail) - 1), symbol="MSFT")
@@ -455,12 +503,17 @@ def test_a_flat_tape_does_not_trade_and_period_changes_the_book():
     con = _insert(rows, symbol="MSFT", start=start)
     try:
         end = start + timedelta(days=len(rows) - 1)
-        slow = _run(con, _willr(period=14), start, end, symbol="MSFT")
+        public = _run(con, _willr(), start, end, symbol="MSFT")
+        classic = _run(con, _willr(period=7, long_at=-80, exit_at=-20), start, end, symbol="MSFT")
         fast = _run(con, _willr(period=2), start, end, symbol="MSFT")
     finally:
         con.close()
-    assert _spine(slow) != _spine(fast)
-    assert slow["trades"][0]["entry_date"] == _day(start, 15)
+    # −80 on this tape is not a scout long. Classic re-enters there; the public book waits.
+    assert _spine(public) != _spine(classic)
+    assert _spine(public) != _spine(fast)
+    assert public["trades"][0]["entry_date"] == _day(start, 8)
+    assert public["open_position"]["entry_date"] == _day(start, 20)
+    assert classic["open_position"]["entry_date"] != public["open_position"]["entry_date"]
 
 
 def test_long_beats_a_flat_rule_and_the_predicate_can_sit_on_short():
@@ -489,12 +542,12 @@ def test_long_beats_a_flat_rule_and_the_predicate_can_sit_on_short():
         con.close()
     assert held["trades"] == []
     assert held["open_position"]["side"] == "long"
-    assert held["open_position"]["entry_date"] == _day(start, 14)
-    assert held["open_position"]["entry_price"] == 100.0
+    assert held["open_position"]["entry_date"] == _day(start, 7)
+    assert held["open_position"]["entry_price"] == 50.0
     assert shorted["trades"] == []
     assert shorted["open_position"]["side"] == "short"
-    assert shorted["open_position"]["entry_date"] == _day(start, 19)
-    assert shorted["open_position"]["entry_price"] == 106.0
+    assert shorted["open_position"]["entry_date"] == _day(start, 12)
+    assert shorted["open_position"]["entry_price"] == 52.0
 
 
 def test_willr_ands_with_rel_volume_and_an_ma_rule():
@@ -510,11 +563,11 @@ def test_willr_ands_with_rel_volume_and_an_ma_rule():
                 long={
                     "logic": "AND",
                     "conditions": [
-                        {"type": "willr_lte", "period": 14, "threshold": -80},
+                        {"type": "willr_lte", "period": 7, "threshold": -95},
                         {"type": "rel_volume", "k": 100, "window": 5},
                     ],
                 },
-                flat={"logic": "OR", "conditions": [{"type": "willr_gte", "period": 14, "threshold": -20}]},
+                flat={"logic": "OR", "conditions": [{"type": "willr_gte", "period": 7, "threshold": -5}]},
             ),
             start,
             end,
@@ -538,7 +591,7 @@ def test_willr_ands_with_rel_volume_and_an_ma_rule():
     assert alone["trades"]
     assert quiet["trades"] == []
     assert quiet["open_position"] is None
-    # The oversold closes (92 and 81) are below SMA(5). The volume-free book still enters.
+    # The oversold closes (4 and 2) are below SMA(5). The volume-free book still enters.
     assert below_ma["trades"] == []
     assert below_ma["open_position"] is None
 
@@ -589,11 +642,11 @@ def test_trail_still_exits_a_willr_long_at_the_next_open():
 
 
 def test_conflict_of_long_and_short_goes_flat():
-    view = SignalView(close=100, mas={}, mas_prev={}, willr={14: -50.0})
+    view = SignalView(close=100, mas={}, mas_prev={}, willr={7: -50.0})
     rules = validate_rules(
         _rules(
-            long={"logic": "AND", "conditions": [{"type": "willr_lte", "threshold": -20}]},
-            short={"logic": "AND", "conditions": [{"type": "willr_gte", "threshold": -80}]},
+            long={"logic": "AND", "conditions": [{"type": "willr_lte", "period": 7, "threshold": -20}]},
+            short={"logic": "AND", "conditions": [{"type": "willr_gte", "period": 7, "threshold": -80}]},
         )
     )
     assert condition_true(rules["long"]["conditions"][0], view)
@@ -621,21 +674,22 @@ def test_golden_aapl_willr_is_bit_stable_on_the_default_us_book():
     assert result["metrics"]["trade_count"] == 1
     assert result["trades"][0]["side"] == "long"
     assert result["trades"][0]["exit_reason"] == "signal"
-    assert result["trades"][0]["entry_price"] == 93.0
-    assert result["trades"][0]["exit_price"] == 106.0
+    assert result["trades"][0]["entry_price"] == 48.0
+    assert result["trades"][0]["exit_price"] == 52.0
     assert result["open_position"]["side"] == "long"
-    assert result["open_position"]["entry_price"] == 82.0
+    assert result["open_position"]["entry_price"] == 46.0
     assert cached == []
     assert _roundtrip(_locked(result)) == expected["result"]
     assert expected["symbol"] == "AAPL"
-    assert expected["period"] == 14
-    assert expected["long_threshold"] == -80
-    assert expected["exit_threshold"] == -20
+    assert expected["period"] == 7
+    assert expected["long_threshold"] == -95
+    assert expected["exit_threshold"] == -5
+    assert expected["compare"] == "inclusive"
     assert expected["costs"] == "us-v1.2-defaults"
 
 
 def write_golden_fixture(path: Path | None = None) -> dict:
-    """Regenerate tests/fixtures/willr_n14_aapl.json. Not used by pytest."""
+    """Regenerate tests/fixtures/willr_n7_aapl.json. Not used by pytest."""
     start = GOLDEN_START
     rows = public_rows()
     con = _insert(rows, start=start)
@@ -646,12 +700,13 @@ def write_golden_fixture(path: Path | None = None) -> dict:
         con.close()
     payload = {
         "symbol": "AAPL",
-        "period": 14,
-        "long_threshold": -80,
-        "exit_threshold": -20,
+        "period": 7,
+        "long_threshold": -95,
+        "exit_threshold": -5,
+        "compare": "inclusive",
         "book": "long willr_lte / flat willr_gte",
         "costs": "us-v1.2-defaults",
-        "note": "Williams %R includes today's high and low; next open; US default costs",
+        "note": "StatOasis scout %R(7) ≤ −95 / ≥ −5; includes today; next open; US default costs",
         "start": start.isoformat(),
         "end": end.isoformat(),
         "result": _roundtrip(_locked(result)),
@@ -682,10 +737,10 @@ def test_api_persists_the_thresholds_and_rejects_a_bad_one():
     assert created.status_code == 200, created.text
     body = created.json()
     assert body["rules"]["long"]["conditions"] == [
-        {"type": "willr_lte", "period": 14, "threshold": -80.0}
+        {"type": "willr_lte", "period": 7, "threshold": -95.0}
     ]
     assert body["rules"]["flat"]["conditions"] == [
-        {"type": "willr_gte", "period": 14, "threshold": -20.0}
+        {"type": "willr_gte", "period": 7, "threshold": -5.0}
     ]
     assert "trail_pct" not in body["rules"]
 
@@ -699,7 +754,7 @@ def test_api_persists_the_thresholds_and_rejects_a_bad_one():
     )
     assert run.status_code == 200, run.text
     assert run.json()["trades"][0]["side"] == "long"
-    assert run.json()["trades"][0]["entry_price"] == 93.0
+    assert run.json()["trades"][0]["entry_price"] == 48.0
     assert run.json()["trades"][0]["exit_reason"] == "signal"
 
     rejected = client.post(
@@ -758,20 +813,29 @@ def test_docs_and_the_research_panel_expose_willr():
     readme = (ROOT / "README.md").read_text()
     prd = (ROOT / "PRD.md").read_text()
     assert 'id: "willr"' in script
-    assert "Williams %R(14)" in script
-    assert "willr_lte: { period: 14, threshold: -80 }" in script
-    assert "willr_gte: { period: 14, threshold: -20 }" in script
+    assert 'id: "willrClassic"' in script
+    assert "Williams %R(7)" in script
+    assert "Williams %R(14) classic" in script
+    assert "StatOasis" in script
+    assert "willr_lte: { period: 7, threshold: -95 }" in script
+    assert "willr_gte: { period: 7, threshold: -5 }" in script
+    assert '{ type: "willr_lte", period: 7, threshold: -95 }' in script
+    assert '{ type: "willr_gte", period: 7, threshold: -5 }' in script
     assert '{ type: "willr_lte", period: 14, threshold: -80 }' in script
     assert '{ type: "willr_gte", period: 14, threshold: -20 }' in script
     assert "function isWillrType" in script
     assert "Williams %R ≤ threshold" in script
     assert "Williams %R ≥ threshold" in script
+    assert "inclusive" in script
     assert "Williams %R(N)" in html
-    assert "N=14" in html
-    assert "−80" in html and "−20" in html
+    assert "N=7" in html
+    assert "−95" in html and "−5" in html
+    assert "Williams %R(14) classic" in html
     assert "willr_lte" in formulas and "willr_gte" in formulas
-    assert "including" in formulas
+    assert "inclusive" in formulas
+    assert "StatOasis" in formulas
     assert "s1-board-v1" in formulas
-    assert "willr_lte" in readme and "−80" in readme
-    assert "Williams %R" in prd
+    assert "inclusive" in readme
+    assert "−95" in readme and "Williams %R(14) classic" in readme
+    assert "StatOasis" in prd
     assert "s1-board-v1" in prd

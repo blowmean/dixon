@@ -273,14 +273,14 @@ LL_t(N) = \min(L_{t-N+1},\ldots,L_t)
 \]
 
 - A close at the window high is 0. A close at the window low is −100. Readings live on that negative scale.
-- `willr_lte`: \(\%R(N)_t \le \mathrm{threshold}\). Defaults: \(N\) **14**, threshold **−80** (oversold; the close is in the bottom fifth of the range).
-- `willr_gte`: \(\%R(N)_t \ge \mathrm{threshold}\). Defaults: \(N\) **14**, threshold **−20** (overbought; the close is in the top fifth of the range).
-- \(N\) is an integer from 1 to 500. The threshold is a number from −100 to 0, the oscillator itself, not a percent return. `−80` means the −80 line.
+- `willr_lte`: \(\%R(N)_t \le \mathrm{threshold}\). The compare is inclusive. Defaults: \(N\) **7**, threshold **−95**. A print of exactly −95 is true.
+- `willr_gte`: \(\%R(N)_t \ge \mathrm{threshold}\). The compare is inclusive. Defaults: \(N\) **7**, threshold **−5**. A print of exactly −5 is true.
+- \(N\) is an integer from 1 to 500. The threshold is a number from −100 to 0, the oscillator itself, not a percent return. `−95` means the −95 line.
 - The signal bar is inside the window. Donchian drops today and compares the close with a prior high or low, so the two disagree when today's wick sets the extreme.
 - Warm-up (fewer than \(N\) bars), a missing high or low in the window, or a zero range \(HH_t = LL_t\) → false. The ratio is undefined when the range is flat.
 - On a positive range this is stochastic \(\%K - 100\), where \(\%K = (C - LL) / (HH - LL) \times 100\). Dixon compares the Williams reading. It does not store \(\%K\).
 
-The public pattern is `willr_lte` \(N=14\) threshold −80 on `long`, and `willr_gte` \(N=14\) threshold −20 on `flat`. No `trail_pct`. While \(\%R\) is strictly between −80 and −20 neither side fires, so an open position is held. A long that is still at or below −80 is not flattened by the −20 rule, because a true long beats flat. US/HK cost defaults are unchanged. The overnight `s1-board-v1` grid does not include this pattern.
+The public pattern is the StatOasis scout cell: `willr_lte` \(N=7\) threshold −95 on `long`, and `willr_gte` \(N=7\) threshold −5 on `flat`. No `trail_pct`. While \(\%R\) is strictly between −95 and −5 neither side fires, so an open position is held. A long that is still at or below −95 is not flattened by the −5 rule, because a true long beats flat. Omitted knobs store these public values. A second preset, Williams %R(14) classic, writes \(N=14\), −80, and −20 on the conditions; those are not the omitted defaults. US/HK cost defaults are unchanged. The overnight `s1-board-v1` grid does not include either pattern.
 
 ### Trailing stop — `trail_pct`
 

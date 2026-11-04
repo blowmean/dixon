@@ -78,8 +78,8 @@
     rsi_gte: { period: 2, threshold: 70 },
     rsi_falling_n: { period: 14, n: 3 },
     rsi_rising_n: { period: 14, n: 3 },
-    willr_lte: { period: 14, threshold: -80 },
-    willr_gte: { period: 14, threshold: -20 },
+    willr_lte: { period: 7, threshold: -95 },
+    willr_gte: { period: 7, threshold: -5 },
     donchian_high: { window: 20 },
     donchian_low: { window: 10 },
     close_lowest: { window: 7 },
@@ -1061,7 +1061,7 @@
       threshold.max = "0";
       threshold.step = "0.1";
       threshold.placeholder = "threshold";
-      threshold.title = "Williams %R threshold, from −100 (close at the N-bar low) to 0 (close at the N-bar high). −80 is oversold. −20 is overbought.";
+      threshold.title = "Williams %R threshold, inclusive ≤ or ≥, from −100 (close at the N-bar low) to 0 (close at the N-bar high). The public lines are −95 and −5.";
     } else {
       threshold.min = "0";
       threshold.max = "100";
@@ -1078,7 +1078,7 @@
     else if (isClose) n.placeholder = "N";
     else if (isEma) n.placeholder = "fast";
     if (isEma) n.title = "Fast EMA span";
-    else if (isWillr) n.title = "Williams %R lookback N. The window includes today's high, low, and close. Default 14.";
+    else if (isWillr) n.title = "Williams %R lookback N. The window includes today's high, low, and close. The public pattern uses 7.";
     else if (isClose) n.title = "Sessions N. Today's close is the min or max of the last N closes, including today.";
     else if (isStreak) {
       n.title = "Consecutive bars N. Each bar's RSI is strictly below (falling) or above (rising) the previous RSI. An equal RSI breaks the streak. Not a z-score.";
@@ -1314,10 +1314,22 @@
     },
     {
       id: "willr",
-      label: "Williams %R(14)",
+      label: "Williams %R(7)",
       description:
-        "Mean reversion on Williams %R. Long when %R(14) is −80 or lower: the close sits in the bottom fifth of the highest high and lowest low of the last 14 bars, including today. Exit when %R(14) is −20 or higher. Between −80 and −20 the open position is held. A day whose high equals its low does not fire. No trailing stop. Fills at the next open. This is the negative Williams reading, not a Donchian break and not stochastic %K.",
-      filled: "Williams %R(14) filled (long ≤ −80, exit ≥ −20). Save to keep it.",
+        "StatOasis scout. Long when Williams %R(7) is −95 or lower. Exit when %R(7) is −5 or higher. The compare is inclusive (≤ and ≥), the same as the RSI threshold tests: a print of exactly −95 is a long, and exactly −5 is an exit. Between −95 and −5 the open position is held. The window is the last 7 highs and lows, including today. A day whose high equals its low does not fire. No trailing stop. Fills at the next open.",
+      filled: "Williams %R(7) filled (long ≤ −95, exit ≥ −5). Save to keep it.",
+      rules: {
+        long: { logic: "AND", conditions: [{ type: "willr_lte", period: 7, threshold: -95 }] },
+        flat: { logic: "OR", conditions: [{ type: "willr_gte", period: 7, threshold: -5 }] },
+        short: { logic: "AND", conditions: [] },
+      },
+    },
+    {
+      id: "willrClassic",
+      label: "Williams %R(14) classic",
+      description:
+        "Textbook Williams lines, kept as a second preset. Long when %R(14) is −80 or lower. Exit when %R(14) is −20 or higher. Inclusive ≤ and ≥. The window includes today. No trailing stop. Fills at the next open. The primary public pattern is Williams %R(7) at −95 and −5.",
+      filled: "Williams %R(14) classic filled (long ≤ −80, exit ≥ −20). Save to keep it.",
       rules: {
         long: { logic: "AND", conditions: [{ type: "willr_lte", period: 14, threshold: -80 }] },
         flat: { logic: "OR", conditions: [{ type: "willr_gte", period: 14, threshold: -20 }] },

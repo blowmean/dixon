@@ -138,7 +138,7 @@ Strategy conditions, same CRUD and next-open backtest. Knobs live on each condit
 | `rel_volume` | k=1.5, N=20 | volume ≥ k × SMA(volume, N), average includes the signal bar |
 | `rsi_lte` / `rsi_gte` | period 2, threshold 5 / 70 | Wilder RSI(period) compared with the threshold |
 | `rsi_falling_n` / `rsi_rising_n` | period 14, N=3 | Wilder RSI strictly fell or rose versus the prior bar on each of the last N closes. Slope, not a z-score of RSI (S1-K16 is not this row) and not the threshold tests |
-| `willr_lte` / `willr_gte` | N=14, threshold −80 / −20 | Williams %R over the last N highs and lows, including today: (highest high − close) / (highest high − lowest low) × −100. Oversold entry and overbought exit. Not Donchian, not stochastic %K, and not an overnight-grid cell |
+| `willr_lte` / `willr_gte` | N=7, threshold −95 / −5, inclusive ≤ / ≥ | Williams %R over the last N highs and lows, including today: (highest high − close) / (highest high − lowest low) × −100. Public book is the StatOasis scout cell. Williams %R(14) classic (−80 / −20) is a second preset. Not an overnight-grid cell |
 | `donchian_high` / `donchian_low` | N=20 / M=10 | close > prior N-bar high, or close < prior M-bar low |
 | `close_lowest` / `close_highest` | N=7 | close equals the min or max close of the last N bars, including today. Connors Double Seven ANDs the low with close > SMA(200) and exits on the high. No trail. Not Donchian |
 | `roc_gte` / `roc_lte` | period 7, threshold +1% / −1% | ROC(period) in percent points versus the close `period` bars ago. Same single-name AND/OR stack as the rows above |

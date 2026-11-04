@@ -15,10 +15,11 @@ Condition types:
                                Equality breaks the run. This is the slope of
                                RSI, not a z-score of the RSI level, and not
                                the threshold tests above.
-  willr_lte, willr_gte         Williams %R(period) <= or >= threshold.
+  willr_lte, willr_gte         Williams %R(period) <= or >= threshold (inclusive,
+                               the same as rsi_lte / rsi_gte).
                                %R = (highest high − close) / (highest high − lowest low) × −100
                                over the last `period` bars, including today.
-                               Defaults period=14, threshold −80 (lte) or −20 (gte).
+                               Defaults period=7, threshold −95 (lte) or −5 (gte).
                                A zero high-low range is false. Not Donchian and
                                not stochastic %K.
   donchian_high                close > max high of the previous `window` bars (default 20)
@@ -73,12 +74,14 @@ can, and that conflict goes flat. The public pattern is long on a 3-bar rise
 of RSI(14) and short on a 3-bar fall, with no trail.
 
 Williams %R is a level test, the same shape as `rsi_lte` / `rsi_gte`, on the
-negative oscillator. The window is the last N highs and lows including today,
-so a close on the high is 0 and a close on the low is −100. The public pattern
-is long when %R(14) <= −80 and flat when %R(14) >= −20. The band between those
-lines holds the open side. A flat high-low range does not fire. There is no
-trail. Donchian still drops today and compares the close with a prior extreme;
-%R does not.
+negative oscillator. The compares are inclusive: a reading equal to the
+threshold is true. The window is the last N highs and lows including today,
+so a close on the high is 0 and a close on the low is −100. The public
+pattern (StatOasis scout) is long when %R(7) <= −95 and flat when %R(7) >= −5.
+The band between those lines holds the open side. A second preset, Williams
+%R(14) classic, writes −80 and −20 explicitly. A flat high-low range does not
+fire. There is no trail. Donchian still drops today and compares the close
+with a prior extreme; %R does not.
 """
 
 from __future__ import annotations
@@ -100,11 +103,13 @@ RSI_GTE_THRESHOLD_DEFAULT = 70.0
 # RSI_t ? RSI_{t-1} ? RSI_{t-2} ? RSI_{t-3}), not a z-score window.
 RSI_SLOPE_PERIOD_DEFAULT = 14
 RSI_SLOPE_N_DEFAULT = 3
-# Public Williams %R pattern. Period 14 includes today's high, low, and close.
-# −80 is the oversold line (long). −20 is the overbought line (flat exit).
-WILLR_PERIOD_DEFAULT = 14
-WILLR_LTE_THRESHOLD_DEFAULT = -80.0
-WILLR_GTE_THRESHOLD_DEFAULT = -20.0
+# Public Williams %R pattern (StatOasis scout). Period 7 includes today's
+# high, low, and close. Compares are inclusive. −95 is the long line.
+# −5 is the flat exit. The classic −80 / −20 lines are a separate preset,
+# not these omitted-knob defaults.
+WILLR_PERIOD_DEFAULT = 7
+WILLR_LTE_THRESHOLD_DEFAULT = -95.0
+WILLR_GTE_THRESHOLD_DEFAULT = -5.0
 WILLR_THRESHOLD_MIN = -100.0
 WILLR_THRESHOLD_MAX = 0.0
 DONCHIAN_HIGH_DEFAULT = 20
