@@ -26,7 +26,7 @@ Warm-up: values are omitted (not written) until `min_periods` is satisfied.
 
 - Implementation: `pandas.Series.rolling(window=n, min_periods=n).mean()`
 - Default names: `MA_5`, `MA_9`, `MA_20`, `MA_30`, `MA_50`, `MA_100`, `MA_200`, `MA_250`
-- Strategy fixed menu (conditions only): **5, 9, 20, 30, 50, 100, 250**. `MA_200` stays on the chart but is not a strategy window.
+- Strategy fixed menu (conditions only): **5, 9, 20, 30, 50, 100, 200, 250**. `MA_200` is the Double Seven trend gate (`price_gt_ma` window 200) and a chart overlay.
 - First valid point: the \(n\)-th available close
 - **Timeframe:** the same formula runs on daily, weekly, or monthly closes. Weekly/monthly rows are stored as `W|MA_n` / `M|MA_n` so they do not collide with the daily cache. The API still returns the logical name `MA_n` plus `timeframe`. First request computes and writes `indicator_cache` + `indicator_meta`; a later request reuses the rows while the bar fingerprint (count, last date, close sum, last close) is unchanged.
 
@@ -171,6 +171,28 @@ Prior channel, **excluding** the signal bar (a close cannot exceed that bar's ow
 - `donchian_high`: \(C_t > \mathrm{High}^{(N)}_t\). Default \(N = 20\).
 - `donchian_low`: \(C_t < \mathrm{Low}^{(M)}_t\). Default \(M = 10\).
 - Warm-up → false. No ATR stop is applied.
+
+### Close extreme — `close_lowest` / `close_highest`
+
+The last N **closes**, including the signal bar. This is not a Donchian channel: Donchian compares the close with prior **highs** or **lows** and leaves today out.
+
+\[
+\mathrm{CloseMin}^{(N)}_t = \min(C_{t-N+1},\ldots,C_t)
+\]
+\[
+\mathrm{CloseMax}^{(N)}_t = \max(C_{t-N+1},\ldots,C_t)
+\]
+
+- `close_lowest`: \(C_t = \mathrm{CloseMin}^{(N)}_t\). Default \(N = 7\).
+- `close_highest`: \(C_t = \mathrm{CloseMax}^{(N)}_t\). Default \(N = 7\).
+- \(N\) is an integer from 1 to 500 (same span as Donchian), so lookbacks 4–7 can be swept. It is not an SMA-menu window.
+- Warm-up (fewer than \(N\) closes) → false.
+- A tie counts: if two closes share the extreme, both bars are true.
+- When every close in the window is equal, both predicates are true. Long still beats flat, so a flat tape does not exit.
+
+Connors Double Seven is `close_lowest` with \(N = 7\) ANDed with `price_gt_ma` window **200** on `long`, and `close_highest` with \(N = 7\) on `flat`. No `trail_pct`. The average only gates entries. An open long is held if price later closes at or below SMA(200), until an N-day high close. The fill is the next bar's open.
+
+A close can be the N-day closing low while it stays above the prior N-bar low (a wick), and the N-day closing high while it stays below the prior N-bar high. Those bars are true for the close extreme and false for Donchian.
 
 ### Rate of change — `roc_gte` / `roc_lte`
 

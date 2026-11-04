@@ -48,7 +48,7 @@
     chartBox: "",
   };
 
-  const MA_MENU = [5, 9, 20, 30, 50, 100, 250];
+  const MA_MENU = [5, 9, 20, 30, 50, 100, 200, 250];
   const COND_TYPES = [
     ["price_gt_ma", "Price > MA"],
     ["price_lt_ma", "Price < MA"],
@@ -61,6 +61,8 @@
     ["rsi_gte", "RSI ≥ threshold"],
     ["donchian_high", "Close > prior N high"],
     ["donchian_low", "Close < prior M low"],
+    ["close_lowest", "Close is N-day low"],
+    ["close_highest", "Close is N-day high"],
     ["roc_gte", "ROC ≥ threshold"],
     ["roc_lte", "ROC ≤ threshold"],
     ["ema_gt_ema", "EMA fast > slow"],
@@ -72,6 +74,8 @@
     rsi_gte: { period: 2, threshold: 70 },
     donchian_high: { window: 20 },
     donchian_low: { window: 10 },
+    close_lowest: { window: 7 },
+    close_highest: { window: 7 },
     roc_gte: { period: 7, threshold: 1 },
     roc_lte: { period: 7, threshold: -1 },
     ema_gt_ema: { fast: 9, slow: 21 },
@@ -922,6 +926,10 @@
     return type === "donchian_high" || type === "donchian_low";
   }
 
+  function isCloseExtremeType(type) {
+    return type === "close_lowest" || type === "close_highest";
+  }
+
   function isRocType(type) {
     return type === "roc_gte" || type === "roc_lte";
   }
@@ -986,7 +994,7 @@
           ? cond.fast
           : (isRsiType(cond.type) || isRocType(cond.type)
             ? cond.period
-            : (isDonchianType(cond.type) || cond.type === "rel_volume" ? cond.window : ""));
+            : (isDonchianType(cond.type) || isCloseExtremeType(cond.type) || cond.type === "rel_volume" ? cond.window : ""));
         const showThreshold = isRsiType(cond.type) || isRocType(cond.type);
         row.innerHTML =
           `<select class="cond-type">${typeOpts}</select>` +
@@ -1009,12 +1017,13 @@
     const isRel = type === "rel_volume";
     const isRsi = isRsiType(type);
     const isDon = isDonchianType(type);
+    const isClose = isCloseExtremeType(type);
     const isRoc = isRocType(type);
     const isEma = isEmaType(type);
     row.querySelector(".cond-window").hidden = !conditionNeedsWindow(type);
     row.querySelector(".cond-stack").hidden = type !== "ma_stack";
     row.querySelector(".cond-k").hidden = !isRel;
-    row.querySelector(".cond-n").hidden = !(isRel || isRsi || isDon || isRoc || isEma);
+    row.querySelector(".cond-n").hidden = !(isRel || isRsi || isDon || isClose || isRoc || isEma);
     row.querySelector(".cond-slow").hidden = !isEma;
     const threshold = row.querySelector(".cond-threshold");
     threshold.hidden = !(isRsi || isRoc);
@@ -1036,8 +1045,13 @@
     else if (isRsi || isRoc) n.placeholder = "period";
     else if (type === "donchian_high") n.placeholder = "N";
     else if (type === "donchian_low") n.placeholder = "M";
+    else if (isClose) n.placeholder = "N";
     else if (isEma) n.placeholder = "fast";
-    n.title = isEma ? "Fast EMA span" : "Lookback N, RSI period, or ROC period";
+    n.title = isEma
+      ? "Fast EMA span"
+      : (isClose
+        ? "Sessions N. Today's close is the min or max of the last N closes, including today."
+        : "Lookback N, RSI period, or ROC period");
     if (!fillDefaults) return;
     const defaults = PREDICATE_DEFAULTS[type];
     if (!defaults) return;
@@ -1089,6 +1103,9 @@
           });
         } else if (isDonchianType(type)) {
           const label = type === "donchian_high" ? "Donchian N" : "Donchian M";
+          conditions.push({ type, window: readRequiredInt(row.querySelector(".cond-n"), label) });
+        } else if (isCloseExtremeType(type)) {
+          const label = type === "close_lowest" ? "Close-low N" : "Close-high N";
           conditions.push({ type, window: readRequiredInt(row.querySelector(".cond-n"), label) });
         } else if (isRocType(type)) {
           conditions.push({
@@ -1215,6 +1232,24 @@
             { type: "rel_volume", k: 1.5, window: 20 },
           ],
         },
+      },
+    },
+    {
+      id: "double7",
+      label: "Double Seven",
+      description:
+        "Connors Double Seven. Long when the close is the lowest close of the last 7 sessions and price is above SMA(200). Exit when the close is the highest close of the last 7 sessions. No trailing stop; the SMA(200) gate only filters entries. Fills at the next open. This is the close, not the Donchian high or low.",
+      filled: "Double Seven filled (N=7, long only above SMA(200)). Save to keep it.",
+      rules: {
+        long: {
+          logic: "AND",
+          conditions: [
+            { type: "close_lowest", window: 7 },
+            { type: "price_gt_ma", window: 200 },
+          ],
+        },
+        flat: { logic: "OR", conditions: [{ type: "close_highest", window: 7 }] },
+        short: { logic: "AND", conditions: [] },
       },
     },
   ];

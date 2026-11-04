@@ -39,6 +39,8 @@ from dixon.compute_indicators import (
     prior_high,
     prior_low,
     rate_of_change,
+    rolling_close_max,
+    rolling_close_min,
     series_by_date,
     volume_sma,
 )
@@ -294,6 +296,14 @@ def run_backtest(
         w: series_by_date(bars["bar_date"], prior_low(bars["low"], w))
         for w in reqs["donchian_low_windows"]
     } if not bars.empty else {}
+    close_min_maps = {
+        w: series_by_date(bars["bar_date"], rolling_close_min(bars["close"], w))
+        for w in reqs["close_low_windows"]
+    } if not bars.empty else {}
+    close_max_maps = {
+        w: series_by_date(bars["bar_date"], rolling_close_max(bars["close"], w))
+        for w in reqs["close_high_windows"]
+    } if not bars.empty else {}
     roc_maps = {
         period: series_by_date(bars["bar_date"], rate_of_change(bars["close"], period))
         for period in reqs["roc_periods"]
@@ -367,6 +377,12 @@ def run_backtest(
                     },
                     prior_low={
                         w: low_maps[w].get(bar_date) for w in reqs["donchian_low_windows"]
+                    },
+                    close_min={
+                        w: close_min_maps[w].get(bar_date) for w in reqs["close_low_windows"]
+                    },
+                    close_max={
+                        w: close_max_maps[w].get(bar_date) for w in reqs["close_high_windows"]
                     },
                     roc={p: roc_maps[p].get(bar_date) for p in reqs["roc_periods"]},
                     emas={span: ema_maps[span].get(bar_date) for span in reqs["ema_spans"]},

@@ -57,8 +57,8 @@
       <label class="chk"><input type="checkbox" data-ind="MA_30" /> MA 30</label>
       <label class="chk"><input type="checkbox" data-ind="MA_50" checked /> MA 50</label>
       <label class="chk"><input type="checkbox" data-ind="MA_100" /> MA 100</label>
-      <label class="chk"><input type="checkbox" data-ind="MA_250" /> MA 250</label>
       <label class="chk"><input type="checkbox" data-ind="MA_200" /> MA 200</label>
+      <label class="chk"><input type="checkbox" data-ind="MA_250" /> MA 250</label>
       <label class="chk"><input type="checkbox" data-ind="EMA_12" /> EMA 12</label>
       <label class="chk"><input type="checkbox" data-ind="EMA_26" /> EMA 26</label>
       <label class="chk"><input type="checkbox" data-ind="BB" checked /> Bollinger 20,2</label>
@@ -179,6 +179,7 @@
             Donchian enters when close breaks the prior N-bar high and exits when close breaks the prior M-bar low (classic 20/10).
             ROC is the percent change versus the close that many bars ago (1 means +1%; default period 7).
             EMA compares two spans (fast above or below slow; defaults 9 and 21). Those spans are not the SMA menu. The EMA 9/21 preset requires relative volume k=1.5 and N=20 on the same side; a bar that fails volume holds the open position.
+            Double Seven is long when the close is the lowest of the last N closes (default 7) and close is above SMA(200), and flat when the close is the highest of those N closes. That compares closes, including today, not the Donchian high or low. There is no trail. SMA windows include 200.
             Trail % is optional: blank leaves it off. 5 means a 5% stop from the peak high (long) or trough low (short) since entry, filled at the next open.
             Knobs are per condition — change them, then Save and run a backtest.
           </p>
@@ -234,7 +235,7 @@
   </div>
 
   <footer>
-    SMA menu (5 / 9 / 20 / 30 / 50 / 100 / 250) and the other overlays are cached in
+    SMA menu (5 / 9 / 20 / 30 / 50 / 100 / 200 / 250) and the other overlays are cached in
     <code>indicator_cache</code> on the selected timeframe (D/W/M).
     Top-50 turnover pools are separate for HK and US.
     The Board tab is the overnight US Top-50 ranking (grid s1-board-v1): top 3 strategies per name by rolling 1-year total P&amp;L.
