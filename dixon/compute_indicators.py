@@ -56,6 +56,29 @@ def prior_low(low: pd.Series, window: int) -> pd.Series:
     return pd.to_numeric(low, errors="coerce").shift(1).rolling(window, min_periods=window).min()
 
 
+def williams_r(high: pd.Series, low: pd.Series, close: pd.Series, period: int) -> pd.Series:
+    """Williams %R over `period` bars, including the current bar.
+
+    %R = (highest high − close) / (highest high − lowest low) × −100.
+    The window is the last `period` highs and lows, including today, so a
+    close at that high is 0 and a close at that low is −100. This is not a
+    Donchian level: Donchian drops the signal bar and compares the close with
+    a prior high or low. It is also not stochastic %K; on a positive range,
+    %R = %K − 100.
+
+    A zero range (highest high equals lowest low) is undefined and left as
+    NaN. A missing high or low inside the window leaves that bar NaN, because
+    the rolling max and min require `period` finite samples. The first
+    `period − 1` bars are NaN. Not written to `indicator_cache`.
+    """
+    hh = pd.to_numeric(high, errors="coerce").rolling(int(period), min_periods=int(period)).max()
+    ll = pd.to_numeric(low, errors="coerce").rolling(int(period), min_periods=int(period)).min()
+    px = pd.to_numeric(close, errors="coerce")
+    span = hh - ll
+    wr = (hh - px) / span * -100.0
+    return wr.where(span > 0)
+
+
 def rolling_close_min(close: pd.Series, window: int) -> pd.Series:
     """Minimum close of the last `window` bars, including the current bar.
 

@@ -44,6 +44,7 @@ from dixon.compute_indicators import (
     rsi_slope_streak,
     series_by_date,
     volume_sma,
+    williams_r,
 )
 from dixon.costs import CostModel, commission, cost_model_from_overrides, slip_per_share
 from dixon.rules import (
@@ -334,6 +335,15 @@ def run_backtest(
         )
         for pair in rising_pairs
     } if not bars.empty else {}
+    # Williams %R on the full OHLC history, including each signal bar. Not a
+    # cached indicator: high and low are not on the close-only chart series.
+    willr_maps = {
+        period: series_by_date(
+            bars["bar_date"],
+            williams_r(bars["high"], bars["low"], bars["close"], period),
+        )
+        for period in reqs["willr_periods"]
+    } if not bars.empty else {}
     trail_pct = rules.get("trail_pct")
 
     spikes: set[date] = set()
@@ -397,6 +407,9 @@ def run_backtest(
                     },
                     rsi_rising={
                         pair: rising_maps[pair].get(bar_date) for pair in rising_pairs
+                    },
+                    willr={
+                        p: willr_maps[p].get(bar_date) for p in reqs["willr_periods"]
                     },
                     prior_high={
                         w: high_maps[w].get(bar_date) for w in reqs["donchian_high_windows"]
