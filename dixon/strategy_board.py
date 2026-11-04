@@ -46,6 +46,9 @@ from dixon.yahoo import infer_market
 log = logging.getLogger("dixon.strategy_board")
 
 GRID_VERSION = "s1-board-v1"
+# The SPY/QQQ consecutive-down overnight book is not a cell of this grid.
+# That book buys the signal close and sells the next open. Every cell here
+# stays on the single-name next-open backtest.
 COSTS_FLAG = "us-v1.2"
 MARKET = "US"
 TOP_N = 3

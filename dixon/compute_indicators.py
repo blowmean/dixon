@@ -301,6 +301,19 @@ def slope_streak_flags(values: pd.Series, n: int, *, falling: bool) -> pd.Series
     return out.mask(done, 1.0)
 
 
+def consec_down_flags(close: pd.Series, n: int) -> pd.Series:
+    """1.0 where each of the last `n` closes is strictly below the prior close.
+
+    `n` counts steps, so the run ending at t reads n+1 closes:
+    close_t < close_{t-1} < … < close_{t-n}. An equal close is not a down
+    close. High, low, open, and volume do not enter. This is the operator
+    behind `consec_down_n` (the overnight book). It is not an RSI slope,
+    not a z-score, and not a close-extreme.
+    """
+    px = pd.to_numeric(close, errors="coerce")
+    return slope_streak_flags(px, int(n), falling=True)
+
+
 def rsi_slope_streak(close: pd.Series, period: int, n: int, *, falling: bool) -> pd.Series:
     """Wilder RSI slope run. Reuses `rsi_wilder` — there is no second RSI.
 

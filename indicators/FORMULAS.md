@@ -369,7 +369,24 @@ While a position is open, track the extreme since the fill (the entry price, the
 - Long: peak \(P_t = \max(P_{t-1}, H_t)\). Exit signal when \(C_t \le P_t \times (1 - \mathrm{trail\_pct}/100)\).
 - Short: trough \(T_t = \min(T_{t-1}, L_t)\). Exit signal when \(C_t \ge T_t \times (1 + \mathrm{trail\_pct}/100)\).
 
-The breach forces flat even when the held side's entry predicate is still true. An opposite-side signal on that same close reverses instead. The fill is the next stored bar's open (`exit_reason` `trail`); the exit price is that open, not the stop level. A breach on the last in-range bar does not flatten. The ROC(7) public pattern uses `trail_pct` 5. US/HK cost defaults are unchanged.
+The breach forces flat even when the held side's entry predicate is still true. An opposite-side signal on that same close reverses instead. The fill is the next stored bar's open (`exit_reason` `trail`); the exit price is that open, not the stop level. A breach on the last in-range bar does not flatten. The ROC(7) public pattern uses `trail_pct` 5. US/HK cost defaults are unchanged. Williams %R, NR7, and Keltner do not set it. The overnight consecutive-down book does not use it either.
+
+### Consecutive down closes — `consec_down_n` (overnight book)
+
+Closes only. High, low, open, and volume do not enter. `n` counts **strict steps**, so the run ending at \(t\) reads \(n+1\) closes:
+
+\[
+\mathrm{ConsecDown}(n)_t
+  = \bigwedge_{k=0}^{n-1}
+    \bigl(C_{t-k} < C_{t-k-1}\bigr)
+\]
+
+- Default \(n\) is **3**: \(C_t < C_{t-1} < C_{t-2} < C_{t-3}\).
+- An equal close is not a down close, so a flat print breaks the run. Warm-up (any of the \(n+1\) closes missing) → false.
+- This predicate is the overnight book, not a next-open signal. Rules carry `"book": "overnight"`. The long side is this condition alone. Flat and short are empty. There is no `trail_pct`.
+- Fill: buy \(C_t\) on the bar the run completes. Sell the next stored bar's open. A run that completes on the last in-range bar does not open, because there is no next open.
+- Universe: daily **SPY** and **QQQ** only. The Top-50 grid `s1-board-v1` does not include this cell. US v1.2 cost defaults apply when overrides are omitted.
+- The same operator is not `rsi_falling_n` (that is the slope of Wilder RSI), not `close_lowest` (that is a window extreme), not Williams %R, not NR7, and not Keltner. Those three stay on the next-open book.
 
 ---
 

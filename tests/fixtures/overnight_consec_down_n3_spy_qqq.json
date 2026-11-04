@@ -1,0 +1,282 @@
+{
+  "book": "overnight",
+  "costs": "us-v1.2-defaults",
+  "fill": "close_to_next_open",
+  "n": 3,
+  "qqq": {
+    "book": "overnight",
+    "currency": "USD",
+    "equity_curve": [
+      {
+        "cash": 100000.0,
+        "date": "2024-01-02",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-01-03",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-01-04",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 79989.0,
+        "date": "2024-01-05",
+        "equity": 99989.0,
+        "side": "long"
+      },
+      {
+        "cash": 100130.208122,
+        "date": "2024-01-06",
+        "equity": 100130.208122,
+        "side": "flat"
+      },
+      {
+        "cash": 100130.208122,
+        "date": "2024-01-07",
+        "equity": 100130.208122,
+        "side": "flat"
+      },
+      {
+        "cash": 100130.208122,
+        "date": "2024-01-08",
+        "equity": 100130.208122,
+        "side": "flat"
+      },
+      {
+        "cash": 80093.153477,
+        "date": "2024-01-09",
+        "equity": 100119.195101,
+        "side": "long"
+      },
+      {
+        "cash": 99956.16161,
+        "date": "2024-01-10",
+        "equity": 99956.16161,
+        "side": "flat"
+      }
+    ],
+    "fill": "close_to_next_open",
+    "metrics": {
+      "ending_equity": 99956.16161,
+      "max_drawdown": 0.0017382,
+      "max_drawdown_meets_target": true,
+      "max_drawdown_target": 0.1,
+      "total_pnl": -43.83839,
+      "total_return": -0.00043838,
+      "trade_count": 2,
+      "win_rate": 0.5,
+      "win_rate_meets_target": false,
+      "win_rate_target": 0.5
+    },
+    "open_position": null,
+    "starting_capital": 100000.0,
+    "trades": [
+      {
+        "entry_commission": 1.0,
+        "entry_date": "2024-01-05",
+        "entry_price": 394.0,
+        "entry_slippage": 10.0,
+        "exit_commission": 1.0,
+        "exit_date": "2024-01-06",
+        "exit_price": 397.0,
+        "exit_reason": "overnight",
+        "exit_slippage": 10.076142,
+        "notional": 20000.0,
+        "pnl": 130.208122,
+        "return_on_notional": 0.00651041,
+        "shares": 50.76142132,
+        "side": "long",
+        "symbol": "QQQ"
+      },
+      {
+        "entry_commission": 1.0,
+        "entry_date": "2024-01-09",
+        "entry_price": 395.0,
+        "entry_slippage": 10.013021,
+        "exit_commission": 1.0,
+        "exit_date": "2024-01-10",
+        "exit_price": 392.0,
+        "exit_reason": "overnight",
+        "exit_slippage": 9.936973,
+        "notional": 20026.041624,
+        "pnl": -174.046512,
+        "return_on_notional": -0.00869101,
+        "shares": 50.69883956,
+        "side": "long",
+        "symbol": "QQQ"
+      }
+    ]
+  },
+  "qqq_total_pnl": -43.83839,
+  "qqq_trade_count": 2,
+  "spy": {
+    "book": "overnight",
+    "currency": "USD",
+    "equity_curve": [
+      {
+        "cash": 100000.0,
+        "date": "2024-01-02",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-01-03",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-01-04",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 79988.969072,
+        "date": "2024-01-05",
+        "equity": 99988.969072,
+        "side": "long"
+      },
+      {
+        "cash": 79847.684254,
+        "date": "2024-01-06",
+        "equity": 99812.359512,
+        "side": "long"
+      },
+      {
+        "cash": 99956.431022,
+        "date": "2024-01-07",
+        "equity": 99956.431022,
+        "side": "flat"
+      },
+      {
+        "cash": 99956.431022,
+        "date": "2024-01-08",
+        "equity": 99956.431022,
+        "side": "flat"
+      },
+      {
+        "cash": 99956.431022,
+        "date": "2024-01-09",
+        "equity": 99956.431022,
+        "side": "flat"
+      },
+      {
+        "cash": 79954.10251,
+        "date": "2024-01-10",
+        "equity": 99945.388715,
+        "side": "long"
+      },
+      {
+        "cash": 79685.392631,
+        "date": "2024-01-11",
+        "equity": 99609.49346,
+        "side": "long"
+      },
+      {
+        "cash": 99179.237746,
+        "date": "2024-01-12",
+        "equity": 99179.237746,
+        "side": "flat"
+      }
+    ],
+    "fill": "close_to_next_open",
+    "metrics": {
+      "ending_equity": 99179.237746,
+      "max_drawdown": 0.00820762,
+      "max_drawdown_meets_target": true,
+      "max_drawdown_target": 0.1,
+      "total_pnl": -820.762254,
+      "total_return": -0.00820762,
+      "trade_count": 4,
+      "win_rate": 0.25,
+      "win_rate_meets_target": false,
+      "win_rate_target": 0.5
+    },
+    "open_position": null,
+    "starting_capital": 100000.0,
+    "trades": [
+      {
+        "entry_commission": 1.030928,
+        "entry_date": "2024-01-05",
+        "entry_price": 97.0,
+        "entry_slippage": 10.0,
+        "exit_commission": 1.030928,
+        "exit_date": "2024-01-06",
+        "exit_price": 96.25,
+        "exit_reason": "overnight",
+        "exit_slippage": 9.92268,
+        "notional": 20000.0,
+        "pnl": -176.623711,
+        "return_on_notional": -0.00883119,
+        "shares": 206.18556701,
+        "side": "long",
+        "symbol": "SPY"
+      },
+      {
+        "entry_commission": 1.034439,
+        "entry_date": "2024-01-06",
+        "entry_price": 96.5,
+        "entry_slippage": 9.982338,
+        "exit_commission": 1.034439,
+        "exit_date": "2024-01-07",
+        "exit_price": 97.25,
+        "exit_reason": "overnight",
+        "exit_slippage": 10.059921,
+        "notional": 19964.675258,
+        "pnl": 133.054733,
+        "return_on_notional": 0.00666451,
+        "shares": 206.8878265,
+        "side": "long",
+        "symbol": "SPY"
+      },
+      {
+        "entry_commission": 1.046664,
+        "entry_date": "2024-01-10",
+        "entry_price": 95.5,
+        "entry_slippage": 9.995643,
+        "exit_commission": 1.046664,
+        "exit_date": "2024-01-11",
+        "exit_price": 94.0,
+        "exit_reason": "overnight",
+        "exit_slippage": 9.838643,
+        "notional": 19991.286204,
+        "pnl": -335.926875,
+        "return_on_notional": -0.01680366,
+        "shares": 209.33283984,
+        "side": "long",
+        "symbol": "SPY"
+      },
+      {
+        "entry_commission": 1.048637,
+        "entry_date": "2024-01-11",
+        "entry_price": 95.0,
+        "entry_slippage": 9.96205,
+        "exit_commission": 1.048637,
+        "exit_date": "2024-01-12",
+        "exit_price": 93.0,
+        "exit_reason": "overnight",
+        "exit_slippage": 9.752323,
+        "notional": 19924.100829,
+        "pnl": -441.266402,
+        "return_on_notional": -0.02214737,
+        "shares": 209.72737715,
+        "side": "long",
+        "symbol": "SPY"
+      }
+    ]
+  },
+  "spy_total_pnl": -820.762254,
+  "spy_trade_count": 4,
+  "symbols": [
+    "SPY",
+    "QQQ"
+  ]
+}

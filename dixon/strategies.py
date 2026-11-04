@@ -9,6 +9,7 @@ from typing import Any
 
 import duckdb
 
+from dixon.overnight import assert_overnight_universe
 from dixon.rules import validate_rules
 from dixon.screener import to_date
 from dixon.yahoo import infer_market
@@ -64,6 +65,8 @@ def _normalize_payload(payload: dict[str, Any]) -> tuple[str, str, str, str, str
         raise ValueError("timeframe must be daily, weekly, or monthly")
     market = infer_market(symbol)
     rules = validate_rules(payload.get("rules"))
+    if rules.get("book") == "overnight":
+        assert_overnight_universe(symbol, market, timeframe)
     return name, symbol, market, timeframe, json.dumps(rules, separators=(",", ":"), sort_keys=True)
 
 

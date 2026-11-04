@@ -20,6 +20,11 @@ Accounting:
     (`exit_reason` `trail`). An opposite-side signal on the same close
     reverses instead. No trail key means no stop.
   * Dividends are ignored. P&L is price change minus the costs above.
+
+The overnight book (`rules.book == "overnight"`) does not use this loop.
+It is dispatched to `dixon.overnight` before any next-open fill: that path
+buys the signal close and sells the next open, and only for `consec_down_n`
+on daily SPY and QQQ. A strategy with no `book` key stays on the loop below.
 """
 
 from __future__ import annotations
@@ -253,6 +258,20 @@ def _max_drawdown(equities: list[float]) -> float:
     return worst
 
 
+def _requests_overnight_book(strategy: dict[str, Any]) -> bool:
+    """True only when the payload asks for the overnight book.
+
+    The next-open loop never inspects this. RSI, relative volume, Donchian,
+    and the other next-open rules omit `book`, so they cannot take the
+    close→next-open fill.
+    """
+    rules = strategy.get("rules")
+    if not isinstance(rules, dict):
+        return False
+    raw = rules.get("book")
+    return isinstance(raw, str) and raw.strip().lower() == "overnight"
+
+
 def run_backtest(
     con: duckdb.DuckDBPyConnection,
     strategy: dict[str, Any],
@@ -262,6 +281,10 @@ def run_backtest(
 ) -> dict[str, Any]:
     if start > end:
         raise ValueError("start must be on or before end")
+    if _requests_overnight_book(strategy):
+        from dixon.overnight import run_overnight_book
+
+        return run_overnight_book(con, strategy, start, end, cost_overrides)
     rules = validate_rules(strategy["rules"])
     market = strategy["market"]
     symbol = strategy["symbol"]
