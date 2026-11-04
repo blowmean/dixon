@@ -297,16 +297,20 @@ R_t = H_t - L_t
 \]
 
 \[
-\mathrm{NR}(N)_t = R_t < \min(R_{t-N+1},\ldots,R_{t-1})
+\mathrm{RangeMin}^{(N)}_t = \min(R_{t-N+1},\ldots,R_t)
 \]
 
-- The compare is **strict**. A tie with any of the prior \(N-1\) ranges is false. Two bars that share a high-low are not both narrow. This is not `close_lowest`, which counts a tie.
+\[
+\mathrm{NR}(N)_t = (R_t = \mathrm{RangeMin}^{(N)}_t) \land (R_t > 0)
+\]
+
+- The compare is **inclusive**. Ties count, the same rule as `close_lowest`. Today's range equals the minimum of the last \(N\) ranges, and today is inside that window. Two bars that share the narrowest positive range are both true.
+- A zero range is excluded. \(R_t = 0\) is false even when zero is the window minimum. A later bar whose window still contains that zero has minimum 0, so a positive range on that bar is not equal to the minimum. Once the zero rolls out of the window, a positive bar can match again.
 - Default \(N = 7\) (NR7). \(N = 4\) is NR4 on the same predicate. \(N\) is an integer from 1 to 500, the same span as Donchian, not an SMA-menu window.
-- \(N = 1\) has no prior range. Every bar with a finite high-low is true.
-- High below low is missing, not a negative range. Any missing bar in the prior \(N-1\) ranges makes the condition false. A later bar whose window has dropped that hole can still be true.
-- A zero range (high equals low) is a real range. It is narrower than every positive prior range. Williams %R treats a zero high-low span as undefined; this predicate does not.
+- \(N = 1\): the bar's own range is the window. A positive range is true. A zero range is false.
+- High below low is missing, not a negative range. Any missing bar in the \(N\) ranges makes the condition false. A later bar whose window has dropped that hole can still be true.
 - Warm-up (fewer than \(N\) finite ranges ending today) → false.
-- Not a cached chart series. The backtest builds it from that symbol's high and low, the same way Donchian is built. Donchian compares the **close** with a prior high or low and drops today. `nr_n` compares ranges.
+- Not a cached chart series. The backtest builds it from that symbol's high and low, the same way Donchian is built. Donchian compares the **close** with a prior high or low and drops today. `nr_n` compares ranges. Williams %R treats a zero high-low span as undefined; this predicate keeps the zero on the range series and then rejects the bar.
 
 The signal is the completed bar. There is no opening-range breakout and no intraday stop at the narrow bar's high or low. The fill is the next stored bar's open.
 

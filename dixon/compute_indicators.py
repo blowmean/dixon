@@ -62,7 +62,8 @@ def bar_range(high: pd.Series, low: pd.Series) -> pd.Series:
     This is the Crabel narrow-range input. It is not true range: the previous
     close does not enter, so a gap does not widen the bar. A negative print
     (high below low) is missing, not a range. A zero print (high equals low)
-    is a real range. Not written to `indicator_cache`.
+    is kept on the series. `nr_n` then rejects that bar. Not written to
+    `indicator_cache`.
     """
     h = pd.to_numeric(high, errors="coerce")
     lo = pd.to_numeric(low, errors="coerce")
@@ -70,26 +71,22 @@ def bar_range(high: pd.Series, low: pd.Series) -> pd.Series:
     return rng.mask(rng < 0)
 
 
-def prior_range_min(high: pd.Series, low: pd.Series, window: int) -> pd.Series:
-    """Minimum high-low range of the previous `window - 1` bars.
+def rolling_range_min(high: pd.Series, low: pd.Series, window: int) -> pd.Series:
+    """Minimum high-low of the last `window` bars, including today.
 
-    Today's range is left out, the same exclusion `prior_low` uses for price.
-    `nr_n` is true when today's `bar_range` is strictly below this level.
-    Window 1 has no prior bar, so the level is all NaN and the predicate
-    treats a finite range as true.
+    Same window as `rolling_close_min`, on `bar_range` instead of close.
+    `nr_n` is true when today's range equals this level and is positive.
+    A tie therefore counts. A zero range can be the minimum; the predicate
+    still rejects the bar whose own range is zero.
 
-    Any missing range in that prior window leaves the level NaN. The rolling
+    Any missing range inside the window leaves the level NaN. The rolling
     minimum would otherwise skip the hole and rank the bars that remain.
     Not true range, and not written to `indicator_cache`.
     """
     n = int(window)
     rng = bar_range(high, low)
-    if n <= 1:
-        return pd.Series(np.nan, index=rng.index, dtype=float)
-    prior = rng.shift(1)
-    span = n - 1
-    covered = prior.notna().astype(float).rolling(span, min_periods=span).sum() == float(span)
-    mins = prior.rolling(span, min_periods=span).min()
+    covered = rng.notna().astype(float).rolling(n, min_periods=n).sum() == float(n)
+    mins = rng.rolling(n, min_periods=n).min()
     return mins.where(covered)
 
 

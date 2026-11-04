@@ -39,7 +39,7 @@ from dixon.compute_indicators import (
     load_ohlc,
     prior_high,
     prior_low,
-    prior_range_min,
+    rolling_range_min,
     rate_of_change,
     rolling_close_max,
     rolling_close_min,
@@ -346,11 +346,12 @@ def run_backtest(
         )
         for period in reqs["willr_periods"]
     } if not bars.empty else {}
-    # High−low rank. Today's range is compared with the min of the previous
-    # N−1 ranges. Not true range, and not a cached indicator.
+    # High−low rank. Today's range equals the min of the last N ranges,
+    # including today. A zero range is excluded by the predicate. Not true
+    # range, and not a cached indicator.
     nr_windows = [int(w) for w in reqs["nr_windows"]]
     range_min_maps = {
-        w: series_by_date(bars["bar_date"], prior_range_min(bars["high"], bars["low"], w))
+        w: series_by_date(bars["bar_date"], rolling_range_min(bars["high"], bars["low"], w))
         for w in nr_windows
     } if not bars.empty else {}
     range_by_date = (
@@ -426,7 +427,7 @@ def run_backtest(
                         p: willr_maps[p].get(bar_date) for p in reqs["willr_periods"]
                     },
                     bar_range=range_by_date.get(bar_date),
-                    range_prior_min={
+                    range_min={
                         w: range_min_maps[w].get(bar_date) for w in nr_windows
                     },
                     prior_high={

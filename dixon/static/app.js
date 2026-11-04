@@ -1085,7 +1085,7 @@
     else if (isClose) n.placeholder = "N";
     else if (isEma) n.placeholder = "fast";
     if (isEma) n.title = "Fast EMA span";
-    else if (isNr) n.title = "Narrow-range N. Today's high minus low must be strictly the smallest of the last N bars, including today. 7 is NR7. A tie does not count. This is not true range.";
+    else if (isNr) n.title = "Narrow-range N. Today's high minus low equals the minimum of the last N bars, including today. 7 is NR7. Ties count. A zero range does not fire. This is not true range.";
     else if (isWillr) n.title = "Williams %R lookback N. The window includes today's high, low, and close. The public pattern uses 7.";
     else if (isClose) n.title = "Sessions N. Today's close is the min or max of the last N closes, including today.";
     else if (isStreak) {
@@ -1353,7 +1353,7 @@
       id: "nr7",
       label: "NR7",
       description:
-        "Toby Crabel narrow range, close-confirmed. Long when today's high minus low is strictly the narrowest of the last 7 bars, including today. A tie does not count. That rank is the session range, not true range and not an opening-range breakout. Exit when the close is above the prior bar's high. No trailing stop. Fills at the next open. A bar that is both NR7 and a close above yesterday's high still enters, because long beats flat.",
+        "Toby Crabel narrow range, close-confirmed. Long when today's high minus low equals the minimum of the last 7 bars, including today. Ties count. A zero range does not fire. That rank is the session range, not true range and not an opening-range breakout. Exit when the close is above the prior bar's high. No trailing stop. Fills at the next open. A bar that is both NR7 and a close above yesterday's high still enters, because long beats flat.",
       filled: "NR7 filled (N=7, exit when close is above the prior high). Save to keep it.",
       rules: {
         long: { logic: "AND", conditions: [{ type: "nr_n", window: 7 }] },

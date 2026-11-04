@@ -1,9 +1,9 @@
 {
   "book": "long nr_n / flat donchian_high window 1",
-  "compare": "strict",
+  "compare": "inclusive",
   "costs": "us-v1.2-defaults",
   "end": "2024-01-11",
-  "note": "NR7 high-low strictly narrowest of 7; exit close > prior high; next open; US default costs",
+  "note": "NR7 high-low equals the min of 7 including today; ties count; zero range excluded; exit close > prior high; next open; US default costs",
   "range": "high-low",
   "result": {
     "currency": "USD",
@@ -105,5 +105,6 @@
   },
   "start": "2024-01-02",
   "symbol": "AAPL",
-  "window": 7
+  "window": 7,
+  "zero_range": "exclude"
 }

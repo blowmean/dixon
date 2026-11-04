@@ -22,11 +22,12 @@ Condition types:
                                Defaults period=7, threshold −95 (lte) or −5 (gte).
                                A zero high-low range is false. Not Donchian and
                                not stochastic %K.
-  nr_n                         today's high−low is strictly the narrowest of
+  nr_n                         today's high−low equals the minimum high−low of
                                the last `window` bars, including today
-                               (default 7, classic NR7). A tie is false.
-                               High−low, not true range. Not an opening-range
-                               breakout.
+                               (default 7, classic NR7). Ties count, the same
+                               inclusive test as close_lowest. A zero range
+                               is false. High−low, not true range. Not an
+                               opening-range breakout.
   donchian_high                close > max high of the previous `window` bars (default 20)
   donchian_low                 close < min low of the previous `window` bars (default 10)
   close_lowest                 close equals the min close of the last `window` bars,
@@ -89,14 +90,16 @@ fire. There is no trail. Donchian still drops today and compares the close
 with a prior extreme; %R does not.
 
 Narrow range N is Crabel's high−low rank, not true range and not Williams %R.
-`nr_n` is true when today's high minus low is strictly below the minimum
-high−low of the previous N−1 bars. A tie is not NR7. The signal is the
-completed bar; the fill is the next open. There is no opening-range breakout.
-The public pattern is long on N=7 and flat when the close is above the prior
-bar's high (`donchian_high` window 1). The StatOasis NR7 notes exit after a
-fixed number of bars; this book has no hold-N-bars condition, so that exit
-is not the preset. There is no trail. A bar that is both NR7 and a close
-above yesterday's high still enters, because long beats flat.
+`nr_n` is true when today's high minus low equals the minimum high−low of
+the last N bars, including today. Ties count, the same inclusive extreme as
+`close_lowest`. A zero range is false even when it is that minimum. The
+signal is the completed bar; the fill is the next open. There is no
+opening-range breakout. The public pattern is long on N=7 and flat when the
+close is above the prior bar's high (`donchian_high` window 1). The
+StatOasis NR7 notes exit after a fixed number of bars; this book has no
+hold-N-bars condition, so that exit is not the preset. There is no trail.
+A bar that is both NR7 and a close above yesterday's high still enters,
+because long beats flat.
 """
 
 from __future__ import annotations
@@ -127,8 +130,8 @@ WILLR_LTE_THRESHOLD_DEFAULT = -95.0
 WILLR_GTE_THRESHOLD_DEFAULT = -5.0
 WILLR_THRESHOLD_MIN = -100.0
 WILLR_THRESHOLD_MAX = 0.0
-# Classic NR7. The rank is high−low, strict, including today as one of the
-# N bars. N=4 is NR4 on the same predicate. Not true range.
+# Classic NR7. The rank is high−low, inclusive, including today. Ties count.
+# A zero range is excluded. N=4 is NR4 on the same predicate. Not true range.
 NR_N_DEFAULT = 7
 DONCHIAN_HIGH_DEFAULT = 20
 DONCHIAN_LOW_DEFAULT = 10
@@ -503,9 +506,10 @@ class SignalView:
     # period → Williams %R. Missing warm-up and a zero range are None.
     willr: dict[int, float | None] = field(default_factory=dict)
     # Today's high−low. None when the bar has no range (missing, or high < low).
+    # Zero is present. `nr_n` rejects it.
     bar_range: float | None = None
-    # window → min high−low of the previous window−1 bars. Today is excluded.
-    range_prior_min: dict[int, float | None] = field(default_factory=dict)
+    # window → min high−low of the last `window` bars, including today.
+    range_min: dict[int, float | None] = field(default_factory=dict)
     prior_high: dict[int, float | None] = field(default_factory=dict)
     prior_low: dict[int, float | None] = field(default_factory=dict)
     close_min: dict[int, float | None] = field(default_factory=dict)
@@ -566,7 +570,7 @@ def condition_true(cond: dict[str, Any], view: SignalView) -> bool:
             return value <= float(cond["threshold"])
         return value >= float(cond["threshold"])
     if ctype == "nr_n":
-        return _narrower_than_prior(view.bar_range, int(cond["window"]), view.range_prior_min)
+        return _is_narrow_range(view.bar_range, int(cond["window"]), view.range_min)
     if ctype == "donchian_high":
         level = view.prior_high.get(cond["window"])
         return level is not None and view.close > level
@@ -628,23 +632,19 @@ def _finite(value: float) -> bool:
     return isinstance(value, (int, float)) and value == value and abs(value) != float("inf")
 
 
-def _narrower_than_prior(
-    rng: float | None, window: int, prior_mins: dict[int, float | None]
+def _is_narrow_range(
+    rng: float | None, window: int, mins: dict[int, float | None]
 ) -> bool:
-    """True when `rng` is strictly below the prior window's minimum range.
+    """True when `rng` equals the minimum high−low of the last N bars.
 
-    Window 1 has no prior bar, so any finite range qualifies. A tie with the
-    prior minimum is false. A missing range or a hole in the prior window is
-    false. This is high−low, not true range.
+    The level includes today, so a tie counts, the same test as
+    `close_lowest`. A zero range is false even when it is that minimum.
+    A missing range or a hole in the window is false. High−low, not true
+    range.
     """
-    if not _finite(rng):
+    if not _finite(rng) or float(rng) <= 0:
         return False
-    if window <= 1:
-        return True
-    prior = prior_mins.get(window)
-    if prior is None or not _finite(prior):
-        return False
-    return float(rng) < float(prior)
+    return _at_extreme(float(rng), mins.get(window))
 
 
 def _at_extreme(close: float, level: float | None) -> bool:

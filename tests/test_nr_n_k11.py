@@ -1,9 +1,10 @@
 """S1-K11: Narrow range N, classic NR7, close-confirm only.
 
-Today's high minus low must be strictly below the minimum high-low of the
-previous N-1 bars. The signal bar is one of the N bars. A tie is not NR7.
-The range is not true range: the previous close does not widen a gap. It is
-not an opening-range breakout and not a hold-N-bars exit.
+Today's high minus low equals the minimum high-low of the last N bars,
+including today. Ties count, the same inclusive extreme as `close_lowest`.
+A zero range is false even when zero is that minimum. The range is not true
+range: the previous close does not widen a gap. It is not an opening-range
+breakout and not a hold-N-bars exit.
 
 The public pattern is long on N=7 and flat when the close is above the prior
 bar's high (`donchian_high` window 1). Long beats flat, so a bar that is both
@@ -25,7 +26,7 @@ from fastapi.testclient import TestClient
 
 from dixon.api import app
 from dixon.backtest import run_backtest
-from dixon.compute_indicators import bar_range, prior_range_min, rolling_close_min, williams_r
+from dixon.compute_indicators import bar_range, rolling_close_min, rolling_range_min, williams_r
 from dixon.costs import CostModel
 from dixon.db import connect
 from dixon.rules import (
@@ -172,7 +173,7 @@ def _ranges(rows):
 
 
 def _oracle(high, low, window):
-    """Independent strict rank. True only when today's range beats every prior bar."""
+    """Independent inclusive rank. True when today's range equals the window min and is positive."""
     out = []
     h = list(high)
     lo = list(low)
@@ -192,21 +193,19 @@ def _oracle(high, low, window):
             out.append(False)
             continue
         today = rngs[-1]
-        out.append(True if n == 1 else today < min(rngs[:-1]))
+        out.append(today > 0 and today == min(rngs))
     return out
 
 
 def _flags(high, low, window):
     rng = bar_range(pd.Series(high, dtype=float), pd.Series(low, dtype=float))
-    if int(window) <= 1:
-        return [bool(v == v and v >= 0) for v in rng.tolist()]
-    prior = prior_range_min(pd.Series(high, dtype=float), pd.Series(low, dtype=float), window)
+    level = rolling_range_min(pd.Series(high, dtype=float), pd.Series(low, dtype=float), window)
     flags = []
-    for cur, level in zip(rng.tolist(), prior.tolist()):
-        if cur != cur or level != level:
+    for cur, least in zip(rng.tolist(), level.tolist()):
+        if cur != cur or least != least:
             flags.append(False)
         else:
-            flags.append(float(cur) < float(level))
+            flags.append(float(cur) > 0 and float(cur) == float(least))
     return flags
 
 
@@ -214,7 +213,7 @@ def _true_idx(flags):
     return [i for i, flag in enumerate(flags) if flag]
 
 
-def test_formula_matches_an_independent_strict_rank_and_rejects_true_range():
+def test_formula_matches_an_independent_inclusive_rank_and_rejects_true_range():
     rows = public_rows()
     high = [r[1] for r in rows]
     low = [r[2] for r in rows]
@@ -242,23 +241,28 @@ def test_formula_matches_an_independent_strict_rank_and_rejects_true_range():
     assert tr[1] > tr[0]
 
 
-def test_a_tie_is_not_narrow_and_a_zero_range_is():
+def test_a_tie_counts_and_a_zero_range_does_not():
     high = [12.0] * 6 + [11.0, 11.0]
     low = [8.0] * 6 + [9.0, 9.0]
     assert _ranges(list(zip([0] * 8, high, low, [0] * 8, [0] * 8))) == [4, 4, 4, 4, 4, 4, 2, 2]
     flags = _oracle(high, low, 7)
     assert flags[6] is True
-    assert flags[7] is False
+    assert flags[7] is True
     assert _flags(high, low, 7) == flags
 
-    flat_high = [20.0, 5.0]
-    flat_low = [0.0, 5.0]
-    assert _oracle(flat_high, flat_low, 2) == [False, True]
+    flat_high = [20.0, 5.0, 8.0, 9.0]
+    flat_low = [0.0, 5.0, 6.0, 7.0]
+    # Ranges 20, 0, 2, 2. N=2: the bar after the zero still sees that zero, so
+    # it is not the minimum. The next bar ties at 2 once the zero has rolled out.
+    assert _oracle(flat_high, flat_low, 2) == [False, False, False, True]
+    assert _flags(flat_high, flat_low, 2) == [False, False, False, True]
     wr = williams_r(
-        pd.Series(flat_high), pd.Series(flat_low), pd.Series([10.0, 5.0]), 1
+        pd.Series(flat_high[:2]), pd.Series(flat_low[:2]), pd.Series([10.0, 5.0]), 1
     )
     assert pd.isna(wr.iloc[1])
-    assert _oracle(flat_high, flat_low, 1) == [True, True]
+    assert _oracle(flat_high, flat_low, 1) == [True, False, True, True]
+    # The zero is the N=7 minimum, so the next positive bar is not equal to it.
+    assert _oracle([12.0] * 6 + [5.0, 8.0], [8.0] * 6 + [5.0, 6.0], 7)[7] is False
 
 
 def test_a_hole_blocks_the_window_that_contains_it():
@@ -279,33 +283,37 @@ def test_nr4_fires_where_nr7_does_not():
 
 
 def test_close_and_volume_do_not_enter_and_close_lowest_disagrees():
-    high = [12.0] * 7
-    low = [8.0] * 7
+    high = [12.0] * 6 + [20.0]
+    low = [8.0] * 6 + [4.0]
     close_b = [10.0] * 6 + [1.0]
-    assert bar_range(pd.Series(high), pd.Series(low)).tolist() == [4.0] * 7
-    assert prior_range_min(pd.Series(high), pd.Series(low), 7).iloc[-1] == 4.0
+    assert bar_range(pd.Series(high), pd.Series(low)).tolist()[-1] == 16.0
+    assert float(rolling_range_min(pd.Series(high), pd.Series(low), 7).iloc[-1]) == 4.0
     assert _oracle(high, low, 7)[-1] is False
     mins = rolling_close_min(pd.Series(close_b, dtype=float), 7)
     assert float(close_b[-1]) == float(mins.iloc[-1])
     assert close_b[-1] < min(close_b[:-1])
 
 
-def test_condition_is_strict_and_window_one_is_every_finite_range():
+def test_condition_counts_a_tie_and_rejects_a_zero_range():
     narrow = {"type": "nr_n", "window": 7}
-    view = SignalView(close=10, mas={}, mas_prev={}, bar_range=1.0, range_prior_min={7: 4.0})
+    view = SignalView(close=10, mas={}, mas_prev={}, bar_range=1.0, range_min={7: 1.0})
     assert condition_true(narrow, view)
-    tied = SignalView(close=10, mas={}, mas_prev={}, bar_range=4.0, range_prior_min={7: 4.0})
-    assert not condition_true(narrow, tied)
-    wider = SignalView(close=10, mas={}, mas_prev={}, bar_range=5.0, range_prior_min={7: 4.0})
+    tied = SignalView(close=10, mas={}, mas_prev={}, bar_range=4.0, range_min={7: 4.0})
+    assert condition_true(narrow, tied)
+    wider = SignalView(close=10, mas={}, mas_prev={}, bar_range=5.0, range_min={7: 4.0})
     assert not condition_true(narrow, wider)
-    missing = SignalView(close=10, mas={}, mas_prev={}, bar_range=None, range_prior_min={7: 4.0})
+    zero = SignalView(close=10, mas={}, mas_prev={}, bar_range=0.0, range_min={7: 0.0})
+    assert not condition_true(narrow, zero)
+    after_zero = SignalView(close=10, mas={}, mas_prev={}, bar_range=2.0, range_min={7: 0.0})
+    assert not condition_true(narrow, after_zero)
+    missing = SignalView(close=10, mas={}, mas_prev={}, bar_range=None, range_min={7: 4.0})
     assert not condition_true(narrow, missing)
-    hole = SignalView(close=10, mas={}, mas_prev={}, bar_range=1.0, range_prior_min={7: None})
+    hole = SignalView(close=10, mas={}, mas_prev={}, bar_range=1.0, range_min={7: None})
     assert not condition_true(narrow, hole)
     one = {"type": "nr_n", "window": 1}
-    assert condition_true(one, SignalView(close=10, mas={}, mas_prev={}, bar_range=0.0))
-    assert condition_true(one, SignalView(close=10, mas={}, mas_prev={}, bar_range=9.0))
-    assert not condition_true(one, SignalView(close=10, mas={}, mas_prev={}, bar_range=None))
+    assert not condition_true(one, SignalView(close=10, mas={}, mas_prev={}, bar_range=0.0, range_min={1: 0.0}))
+    assert condition_true(one, SignalView(close=10, mas={}, mas_prev={}, bar_range=9.0, range_min={1: 9.0}))
+    assert not condition_true(one, SignalView(close=10, mas={}, mas_prev={}, bar_range=None, range_min={1: None}))
 
 
 def test_omitted_window_is_seven_and_bounds_reject():
@@ -385,12 +393,13 @@ def test_history_before_the_window_still_ranks_and_the_last_bar_does_not_fill():
     assert cold["open_position"] is None
 
 
-def test_a_tie_does_not_enter_and_long_beats_a_same_bar_prior_high():
+def test_a_tie_enters_at_the_next_open_and_a_zero_range_does_not():
     start = date(2024, 4, 1)
     tied = [(10.0, 12.0, 8.0, 10.0, 1000)] * 6
     tied.append((10.0, 11.0, 9.0, 10.0, 1000))
     tied.append((10.0, 11.0, 9.0, 10.0, 1000))
-    tied.append((12.0, 13.0, 11.0, 12.0, 1000))
+    tied.append((15.0, 17.0, 15.0, 16.0, 1000))
+    assert _oracle([r[1] for r in tied], [r[2] for r in tied], 7)[6:8] == [True, True]
     con = _insert(tied, start=start)
     try:
         end = start + timedelta(days=len(tied) - 1)
@@ -398,14 +407,29 @@ def test_a_tie_does_not_enter_and_long_beats_a_same_bar_prior_high():
     finally:
         con.close()
     assert result["trades"] == []
-    assert result["open_position"] is None
+    assert result["open_position"]["side"] == "long"
+    assert result["open_position"]["entry_date"] == _day(start, 8)
+    assert result["open_position"]["entry_price"] == 15.0
+    assert result["open_position"]["entry_price"] != 10.0
+
+    zero = [(10.0, 12.0, 8.0, 10.0, 1000)] * 6
+    zero.append((5.0, 5.0, 5.0, 5.0, 1000))
+    zero.append((6.0, 8.0, 6.0, 7.0, 1000))
+    assert _oracle([r[1] for r in zero], [r[2] for r in zero], 7)[6:] == [False, False]
+    con = _insert(zero, symbol="MSFT", start=start)
+    try:
+        flat = _run(con, _nr(with_exit=False), start, start + timedelta(days=len(zero) - 1), symbol="MSFT")
+    finally:
+        con.close()
+    assert flat["trades"] == []
+    assert flat["open_position"] is None
 
     both = [(10.0, 12.0, 8.0, 10.0, 1000)] * 6
     both.append((12.0, 13.0, 12.0, 12.5, 1000))
     both.append((11.0, 14.0, 10.0, 11.0, 1000))
-    con = _insert(both, symbol="MSFT", start=start)
+    con = _insert(both, symbol="NVDA", start=start)
     try:
-        entered = _run(con, _nr(), start, start + timedelta(days=len(both) - 1), symbol="MSFT")
+        entered = _run(con, _nr(), start, start + timedelta(days=len(both) - 1), symbol="NVDA")
     finally:
         con.close()
     _closed, opened = _spine(entered)
@@ -415,6 +439,11 @@ def test_a_tie_does_not_enter_and_long_beats_a_same_bar_prior_high():
 
 
 def test_nr4_and_nr7_are_different_books():
+    """A tie of range 5 is NR4 once the earlier range of 1 rolls out of four bars.
+
+    That same range of 1 stays inside every complete seven-bar window, so NR7
+    never matches. The fill is the next open after the first tied bar.
+    """
     start = date(2024, 5, 1)
     rows = [
         (10.0, 11.0, 10.0, 10.5, 1000),
@@ -426,8 +455,10 @@ def test_nr4_and_nr7_are_different_books():
         (10.0, 12.0, 10.0, 11.0, 1000),
         (9.0, 16.0, 8.0, 14.0, 1000),
     ]
-    assert _oracle([r[1] for r in rows], [r[2] for r in rows], 4)[6] is True
-    assert _oracle([r[1] for r in rows], [r[2] for r in rows], 7)[6] is False
+    high = [r[1] for r in rows]
+    low = [r[2] for r in rows]
+    assert _oracle(high, low, 4)[4] is True
+    assert _true_idx(_oracle(high, low, 7)) == []
     con = _insert(rows, start=start)
     try:
         end = start + timedelta(days=len(rows) - 1)
@@ -436,8 +467,8 @@ def test_nr4_and_nr7_are_different_books():
     finally:
         con.close()
     assert short_n["trades"] == []
-    assert short_n["open_position"]["entry_date"] == _day(start, 7)
-    assert short_n["open_position"]["entry_price"] == 9.0
+    assert short_n["open_position"]["entry_date"] == _day(start, 5)
+    assert short_n["open_position"]["entry_price"] == 10.0
     assert long_n["trades"] == []
     assert long_n["open_position"] is None
 
@@ -529,7 +560,7 @@ def test_trail_still_exits_an_nr_long_at_the_next_open():
 
 
 def test_conflict_of_long_and_short_goes_flat():
-    view = SignalView(close=10, mas={}, mas_prev={}, bar_range=1.0, range_prior_min={7: 4.0})
+    view = SignalView(close=10, mas={}, mas_prev={}, bar_range=1.0, range_min={7: 1.0})
     rules = validate_rules(
         _rules(
             long={"logic": "AND", "conditions": [{"type": "nr_n", "window": 7}]},
@@ -566,7 +597,8 @@ def test_golden_aapl_nr7_is_bit_stable_on_the_default_us_book():
     assert _roundtrip(_locked(result)) == expected["result"]
     assert expected["symbol"] == "AAPL"
     assert expected["window"] == 7
-    assert expected["compare"] == "strict"
+    assert expected["compare"] == "inclusive"
+    assert expected["zero_range"] == "exclude"
     assert expected["range"] == "high-low"
     assert expected["costs"] == "us-v1.2-defaults"
 
@@ -584,11 +616,12 @@ def write_golden_fixture(path: Path | None = None) -> dict:
     payload = {
         "symbol": "AAPL",
         "window": 7,
-        "compare": "strict",
+        "compare": "inclusive",
+        "zero_range": "exclude",
         "range": "high-low",
         "book": "long nr_n / flat donchian_high window 1",
         "costs": "us-v1.2-defaults",
-        "note": "NR7 high-low strictly narrowest of 7; exit close > prior high; next open; US default costs",
+        "note": "NR7 high-low equals the min of 7 including today; ties count; zero range excluded; exit close > prior high; next open; US default costs",
         "start": start.isoformat(),
         "end": end.isoformat(),
         "result": _roundtrip(_locked(result)),
@@ -702,9 +735,17 @@ def test_docs_and_the_research_panel_expose_nr7():
     assert "NR7" in html
     assert "not true range" in html
     assert "prior bar's high" in html
-    assert "nr_n" in formulas
-    assert "strict" in formulas
-    assert "true range" in formulas.lower() or "true range" in formulas
+    nr_doc = formulas.split("### Narrow range")[1].split("### Trailing")[0]
+    assert "inclusive" in nr_doc
+    assert "Ties count" in nr_doc
+    assert "zero range" in nr_doc.lower()
+    assert "strict" not in nr_doc.lower()
+    assert "true range" in nr_doc.lower()
+    assert "Ties count" in script
+    assert "zero range does not fire" in script
+    assert "strictly the narrowest" not in script
+    assert "Ties count" in html
+    assert "A zero range does not fire" in html
     assert "s1-board-v1" in formulas
     assert "not true range" in readme
     assert "NR7" in readme
