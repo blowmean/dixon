@@ -44,6 +44,17 @@ Condition types:
                                not only the bar it crosses. Equal values and
                                warm-up are false. Volume is not inside this
                                predicate: AND a rel_volume condition to confirm.
+  keltner_below                close < lower Keltner band. Mid is the EMA of
+                               typical price (high+low+close)/3. Bands are
+                               mid ± Wilder ATR(keltner_len) × atr_mult.
+                               Defaults keltner_len=6, atr_mult=1.3. Strict:
+                               a close on the band is false. Warm-up is false.
+                               Not Bollinger %B / BandWidth and not Donchian.
+  keltner_above                close > the Keltner mid (the EMA of typical
+                               price), not the upper band. Same knobs. This is
+                               the mean-reversion exit. Same length and
+                               multiplier cannot be both below the lower band
+                               and above the mid.
 
 Optional top-level `trail_pct` (percent points, not a fraction): while a
 position is open, a close that has retraced that percent from the peak high
@@ -100,6 +111,14 @@ StatOasis NR7 notes exit after a fixed number of bars; this book has no
 hold-N-bars condition, so that exit is not the preset. There is no trail.
 A bar that is both NR7 and a close above yesterday's high still enters,
 because long beats flat.
+
+Keltner mean reversion is long when `keltner_below` is true and flat when
+`keltner_above` is true. The public pattern uses one length, 6, for both the
+EMA of typical price and the Wilder ATR, and ATR multiplier 1.3. There is no
+short and no trail. A close between the lower band and the mid (inclusive)
+fires neither side, so an open long is held until the close is back above
+the mid. The length and multiplier are caller knobs. They are not fitted on
+the overnight Top-50 board, and `s1-board-v1` does not include this pattern.
 """
 
 from __future__ import annotations
@@ -144,6 +163,11 @@ ROC_LTE_THRESHOLD_DEFAULT = -1.0
 # (the preset uses the existing k=1.5, window=20), not a field on these types.
 EMA_FAST_DEFAULT = 9
 EMA_SLOW_DEFAULT = 21
+# Public Keltner mean-reversion. One length drives the EMA of typical price
+# and the Wilder ATR. atr_mult is an ATR multiple, not a standard-deviation
+# multiple. Not fitted on the Top-50 board; s1-board-v1 does not use it.
+KELTNER_LEN_DEFAULT = 6
+KELTNER_ATR_MULT_DEFAULT = 1.3
 # Filled by the ROC(7) public pattern. Omitted `trail_pct` means no stop.
 K2_TRAIL_PCT_DEFAULT = 5.0
 TRAIL_PCT_MAX = 100.0
@@ -155,6 +179,7 @@ _LOOKBACK_MAX = 500
 _RSI_PERIOD_MIN = 1
 _RSI_PERIOD_MAX = 250
 _K_MAX = 100.0
+_ATR_MULT_MAX = 100.0
 
 _WINDOWED = {"price_gt_ma", "price_lt_ma", "ma_slope_gt_0", "ma_slope_lt_0"}
 _TYPES = _WINDOWED | {
@@ -176,6 +201,8 @@ _TYPES = _WINDOWED | {
     "roc_lte",
     "ema_gt_ema",
     "ema_lt_ema",
+    "keltner_below",
+    "keltner_above",
 }
 _SIDES = ("long", "flat", "short")
 
@@ -389,6 +416,20 @@ def validate_rules(rules: Any) -> dict[str, Any]:
                     raise ValueError(f"{side} {ctype} fast and slow must be different spans")
                 item["fast"] = fast
                 item["slow"] = slow
+            elif ctype in {"keltner_below", "keltner_above"}:
+                item["keltner_len"] = _as_int_in(
+                    _present(cond, "keltner_len", KELTNER_LEN_DEFAULT),
+                    f"{side} {ctype} keltner_len",
+                    _LOOKBACK_MIN,
+                    _LOOKBACK_MAX,
+                )
+                item["atr_mult"] = _as_float_in(
+                    _present(cond, "atr_mult", KELTNER_ATR_MULT_DEFAULT),
+                    f"{side} {ctype} atr_mult",
+                    0.0,
+                    _ATR_MULT_MAX,
+                    lo_exclusive=True,
+                )
             conds.append(item)
         out[side] = {"logic": logic, "conditions": conds}
     trail = _canonical_trail(rules)
@@ -414,7 +455,7 @@ def _canonical_trail(rules: dict[str, Any]) -> float | None:
 
 
 def windows_used(rules: dict[str, Any]) -> list[int]:
-    """Price-SMA windows. Volume, Donchian, close-extreme, RSI-slope, Williams %R, and narrow-range lookbacks are not."""
+    """Price-SMA windows. Volume, Donchian, close-extreme, RSI-slope, Williams %R, narrow-range, and Keltner lengths are not."""
     found: set[int] = set()
     for side in _SIDES:
         for cond in rules.get(side, {}).get("conditions", []):
@@ -441,6 +482,7 @@ def signal_requirements(rules: dict[str, Any]) -> dict[str, Any]:
     close_high: set[int] = set()
     roc: set[int] = set()
     ema: set[int] = set()
+    keltner: set[tuple[int, float]] = set()
     needs_spike = False
     for side in _SIDES:
         for cond in rules.get(side, {}).get("conditions", []):
@@ -470,6 +512,8 @@ def signal_requirements(rules: dict[str, Any]) -> dict[str, Any]:
             elif ctype in {"ema_gt_ema", "ema_lt_ema"}:
                 ema.add(int(cond["fast"]))
                 ema.add(int(cond["slow"]))
+            elif ctype in {"keltner_below", "keltner_above"}:
+                keltner.add((int(cond["keltner_len"]), float(cond["atr_mult"])))
             elif ctype == "top50_spike":
                 needs_spike = True
     return {
@@ -485,6 +529,7 @@ def signal_requirements(rules: dict[str, Any]) -> dict[str, Any]:
         "close_high_windows": sorted(close_high),
         "roc_periods": sorted(roc),
         "ema_spans": sorted(ema),
+        "keltner": [[length, mult] for length, mult in sorted(keltner)],
         "needs_spike": needs_spike,
     }
 
@@ -516,6 +561,9 @@ class SignalView:
     close_max: dict[int, float | None] = field(default_factory=dict)
     roc: dict[int, float | None] = field(default_factory=dict)
     emas: dict[int, float | None] = field(default_factory=dict)
+    # (keltner_len, atr_mult) → lower band, and the EMA of typical price.
+    keltner_lower: dict[tuple[int, float], float | None] = field(default_factory=dict)
+    keltner_mid: dict[tuple[int, float], float | None] = field(default_factory=dict)
 
 
 def condition_true(cond: dict[str, Any], view: SignalView) -> bool:
@@ -596,6 +644,25 @@ def condition_true(cond: dict[str, Any], view: SignalView) -> bool:
         if ctype == "ema_gt_ema":
             return fast > slow
         return fast < slow
+    if ctype in {"keltner_below", "keltner_above"}:
+        key = (int(cond["keltner_len"]), float(cond["atr_mult"]))
+        if ctype == "keltner_below":
+            level = view.keltner_lower.get(key)
+            # Strict. A close that lands on the lower band is not a break.
+            return (
+                level is not None
+                and _finite(view.close)
+                and _finite(level)
+                and float(view.close) < float(level)
+            )
+        level = view.keltner_mid.get(key)
+        # Above the mid, not the upper band. Equality holds the open side.
+        return (
+            level is not None
+            and _finite(view.close)
+            and _finite(level)
+            and float(view.close) > float(level)
+        )
     return False
 
 
