@@ -1,0 +1,109 @@
+{
+  "book": "long nr_n / flat donchian_high window 1",
+  "compare": "strict",
+  "costs": "us-v1.2-defaults",
+  "end": "2024-01-11",
+  "note": "NR7 high-low strictly narrowest of 7; exit close > prior high; next open; US default costs",
+  "range": "high-low",
+  "result": {
+    "currency": "USD",
+    "equity_curve": [
+      {
+        "cash": 100000.0,
+        "date": "2024-01-02",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-01-03",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-01-04",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-01-05",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-01-06",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-01-07",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-01-08",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 79980.909091,
+        "date": "2024-01-09",
+        "equity": 98980.909091,
+        "side": "long"
+      },
+      {
+        "cash": 79980.909091,
+        "date": "2024-01-10",
+        "equity": 107253.636364,
+        "side": "long"
+      },
+      {
+        "cash": 103596.363636,
+        "date": "2024-01-11",
+        "equity": 103596.363636,
+        "side": "flat"
+      }
+    ],
+    "metrics": {
+      "ending_equity": 103596.363636,
+      "max_drawdown": 0.03409929,
+      "max_drawdown_meets_target": true,
+      "max_drawdown_target": 0.1,
+      "total_pnl": 3596.363636,
+      "total_return": 0.03596364,
+      "trade_count": 1,
+      "win_rate": 1.0,
+      "win_rate_meets_target": true,
+      "win_rate_target": 0.5
+    },
+    "open_position": null,
+    "starting_capital": 100000.0,
+    "trades": [
+      {
+        "entry_commission": 9.090909,
+        "entry_date": "2024-01-09",
+        "entry_price": 11.0,
+        "entry_slippage": 10.0,
+        "exit_commission": 9.090909,
+        "exit_date": "2024-01-11",
+        "exit_price": 13.0,
+        "exit_reason": "signal",
+        "exit_slippage": 11.818182,
+        "notional": 20000.0,
+        "pnl": 3596.363636,
+        "return_on_notional": 0.17981818,
+        "shares": 1818.18181818,
+        "side": "long",
+        "symbol": "AAPL"
+      }
+    ]
+  },
+  "start": "2024-01-02",
+  "symbol": "AAPL",
+  "window": 7
+}

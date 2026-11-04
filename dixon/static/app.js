@@ -63,6 +63,7 @@
     ["rsi_rising_n", "RSI rising N bars"],
     ["willr_lte", "Williams %R ≤ threshold"],
     ["willr_gte", "Williams %R ≥ threshold"],
+    ["nr_n", "Narrow range N"],
     ["donchian_high", "Close > prior N high"],
     ["donchian_low", "Close < prior M low"],
     ["close_lowest", "Close is N-day low"],
@@ -80,6 +81,7 @@
     rsi_rising_n: { period: 14, n: 3 },
     willr_lte: { period: 7, threshold: -95 },
     willr_gte: { period: 7, threshold: -5 },
+    nr_n: { window: 7 },
     donchian_high: { window: 20 },
     donchian_low: { window: 10 },
     close_lowest: { window: 7 },
@@ -938,6 +940,10 @@
     return type === "willr_lte" || type === "willr_gte";
   }
 
+  function isNrType(type) {
+    return type === "nr_n";
+  }
+
   function isDonchianType(type) {
     return type === "donchian_high" || type === "donchian_low";
   }
@@ -1012,7 +1018,7 @@
             ? cond.n
             : (isRsiType(cond.type) || isRocType(cond.type) || isWillrType(cond.type)
               ? cond.period
-              : (isDonchianType(cond.type) || isCloseExtremeType(cond.type) || cond.type === "rel_volume" ? cond.window : "")));
+              : (isDonchianType(cond.type) || isCloseExtremeType(cond.type) || isNrType(cond.type) || cond.type === "rel_volume" ? cond.window : "")));
         const showThreshold = isRsiType(cond.type) || isRocType(cond.type) || isWillrType(cond.type);
         const streakPeriod = isRsiStreakType(cond.type) && cond.period != null ? cond.period : "";
         row.innerHTML =
@@ -1038,6 +1044,7 @@
     const isRsi = isRsiType(type);
     const isStreak = isRsiStreakType(type);
     const isWillr = isWillrType(type);
+    const isNr = isNrType(type);
     const isDon = isDonchianType(type);
     const isClose = isCloseExtremeType(type);
     const isRoc = isRocType(type);
@@ -1045,7 +1052,7 @@
     row.querySelector(".cond-window").hidden = !conditionNeedsWindow(type);
     row.querySelector(".cond-stack").hidden = type !== "ma_stack";
     row.querySelector(".cond-k").hidden = !isRel;
-    row.querySelector(".cond-n").hidden = !(isRel || isRsi || isStreak || isWillr || isDon || isClose || isRoc || isEma);
+    row.querySelector(".cond-n").hidden = !(isRel || isRsi || isStreak || isWillr || isNr || isDon || isClose || isRoc || isEma);
     row.querySelector(".cond-period").hidden = !isStreak;
     row.querySelector(".cond-slow").hidden = !isEma;
     const threshold = row.querySelector(".cond-threshold");
@@ -1071,13 +1078,14 @@
     }
     const n = row.querySelector(".cond-n");
     if (isRel) n.placeholder = "N";
-    else if (isStreak || isWillr) n.placeholder = "N";
+    else if (isStreak || isWillr || isNr) n.placeholder = "N";
     else if (isRsi || isRoc) n.placeholder = "period";
     else if (type === "donchian_high") n.placeholder = "N";
     else if (type === "donchian_low") n.placeholder = "M";
     else if (isClose) n.placeholder = "N";
     else if (isEma) n.placeholder = "fast";
     if (isEma) n.title = "Fast EMA span";
+    else if (isNr) n.title = "Narrow-range N. Today's high minus low must be strictly the smallest of the last N bars, including today. 7 is NR7. A tie does not count. This is not true range.";
     else if (isWillr) n.title = "Williams %R lookback N. The window includes today's high, low, and close. The public pattern uses 7.";
     else if (isClose) n.title = "Sessions N. Today's close is the min or max of the last N closes, including today.";
     else if (isStreak) {
@@ -1148,6 +1156,11 @@
             type,
             period: readRequiredInt(row.querySelector(".cond-n"), which + " N"),
             threshold: readRequiredNumber(row.querySelector(".cond-threshold"), which + " threshold"),
+          });
+        } else if (isNrType(type)) {
+          conditions.push({
+            type,
+            window: readRequiredInt(row.querySelector(".cond-n"), "Narrow range N"),
           });
         } else if (isDonchianType(type)) {
           const label = type === "donchian_high" ? "Donchian N" : "Donchian M";
@@ -1333,6 +1346,18 @@
       rules: {
         long: { logic: "AND", conditions: [{ type: "willr_lte", period: 14, threshold: -80 }] },
         flat: { logic: "OR", conditions: [{ type: "willr_gte", period: 14, threshold: -20 }] },
+        short: { logic: "AND", conditions: [] },
+      },
+    },
+    {
+      id: "nr7",
+      label: "NR7",
+      description:
+        "Toby Crabel narrow range, close-confirmed. Long when today's high minus low is strictly the narrowest of the last 7 bars, including today. A tie does not count. That rank is the session range, not true range and not an opening-range breakout. Exit when the close is above the prior bar's high. No trailing stop. Fills at the next open. A bar that is both NR7 and a close above yesterday's high still enters, because long beats flat.",
+      filled: "NR7 filled (N=7, exit when close is above the prior high). Save to keep it.",
+      rules: {
+        long: { logic: "AND", conditions: [{ type: "nr_n", window: 7 }] },
+        flat: { logic: "OR", conditions: [{ type: "donchian_high", window: 1 }] },
         short: { logic: "AND", conditions: [] },
       },
     },

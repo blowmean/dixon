@@ -282,6 +282,36 @@ LL_t(N) = \min(L_{t-N+1},\ldots,L_t)
 
 The public pattern is the StatOasis scout cell: `willr_lte` \(N=7\) threshold −95 on `long`, and `willr_gte` \(N=7\) threshold −5 on `flat`. No `trail_pct`. While \(\%R\) is strictly between −95 and −5 neither side fires, so an open position is held. A long that is still at or below −95 is not flattened by the −5 rule, because a true long beats flat. Omitted knobs store these public values. A second preset, Williams %R(14) classic, writes \(N=14\), −80, and −20 on the conditions; those are not the omitted defaults. US/HK cost defaults are unchanged. The overnight `s1-board-v1` grid does not include either pattern.
 
+### Narrow range — `nr_n`
+
+Toby Crabel's narrow-range rank on the session's high minus low. Today's range is one of the \(N\) bars. This is **not** Wilder's true range and not an average true range. True range is
+
+\[
+\mathrm{TR}_t = \max(H_t - L_t,\ |H_t - C_{t-1}|,\ |L_t - C_{t-1}|)
+\]
+
+A gap can make \(\mathrm{TR}_t\) wide while \(H_t - L_t\) is the narrowest print in the window. `nr_n` uses only the high-low. The previous close, the open, and volume do not enter. Williams %R uses the same high and low to place the close inside the window; it does not rank the ranges.
+
+\[
+R_t = H_t - L_t
+\]
+
+\[
+\mathrm{NR}(N)_t = R_t < \min(R_{t-N+1},\ldots,R_{t-1})
+\]
+
+- The compare is **strict**. A tie with any of the prior \(N-1\) ranges is false. Two bars that share a high-low are not both narrow. This is not `close_lowest`, which counts a tie.
+- Default \(N = 7\) (NR7). \(N = 4\) is NR4 on the same predicate. \(N\) is an integer from 1 to 500, the same span as Donchian, not an SMA-menu window.
+- \(N = 1\) has no prior range. Every bar with a finite high-low is true.
+- High below low is missing, not a negative range. Any missing bar in the prior \(N-1\) ranges makes the condition false. A later bar whose window has dropped that hole can still be true.
+- A zero range (high equals low) is a real range. It is narrower than every positive prior range. Williams %R treats a zero high-low span as undefined; this predicate does not.
+- Warm-up (fewer than \(N\) finite ranges ending today) → false.
+- Not a cached chart series. The backtest builds it from that symbol's high and low, the same way Donchian is built. Donchian compares the **close** with a prior high or low and drops today. `nr_n` compares ranges.
+
+The signal is the completed bar. There is no opening-range breakout and no intraday stop at the narrow bar's high or low. The fill is the next stored bar's open.
+
+The StatOasis NR7 notes rank this same high-low and then exit after a fixed number of bars. This book has no hold-N-bars condition, so that exit is not the public pattern. Crabel's opening-range breakout is not this book either. The public pattern is `nr_n` \(N=7\) on `long`, and `donchian_high` window **1** on `flat` (the close is above the prior bar's high). No `trail_pct`. Long beats flat, so a bar that is both NR7 and a close above yesterday's high still enters; the exit waits for a later bar. While neither side is true the open position is held. US/HK cost defaults are unchanged. The overnight `s1-board-v1` grid does not include the pattern.
+
 ### Trailing stop — `trail_pct`
 
 Optional number on the rules object, not a condition. Percent points: `5` means 5%. Omit or null to disable.

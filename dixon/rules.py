@@ -22,6 +22,11 @@ Condition types:
                                Defaults period=7, threshold −95 (lte) or −5 (gte).
                                A zero high-low range is false. Not Donchian and
                                not stochastic %K.
+  nr_n                         today's high−low is strictly the narrowest of
+                               the last `window` bars, including today
+                               (default 7, classic NR7). A tie is false.
+                               High−low, not true range. Not an opening-range
+                               breakout.
   donchian_high                close > max high of the previous `window` bars (default 20)
   donchian_low                 close < min low of the previous `window` bars (default 10)
   close_lowest                 close equals the min close of the last `window` bars,
@@ -82,6 +87,16 @@ The band between those lines holds the open side. A second preset, Williams
 %R(14) classic, writes −80 and −20 explicitly. A flat high-low range does not
 fire. There is no trail. Donchian still drops today and compares the close
 with a prior extreme; %R does not.
+
+Narrow range N is Crabel's high−low rank, not true range and not Williams %R.
+`nr_n` is true when today's high minus low is strictly below the minimum
+high−low of the previous N−1 bars. A tie is not NR7. The signal is the
+completed bar; the fill is the next open. There is no opening-range breakout.
+The public pattern is long on N=7 and flat when the close is above the prior
+bar's high (`donchian_high` window 1). The StatOasis NR7 notes exit after a
+fixed number of bars; this book has no hold-N-bars condition, so that exit
+is not the preset. There is no trail. A bar that is both NR7 and a close
+above yesterday's high still enters, because long beats flat.
 """
 
 from __future__ import annotations
@@ -112,6 +127,9 @@ WILLR_LTE_THRESHOLD_DEFAULT = -95.0
 WILLR_GTE_THRESHOLD_DEFAULT = -5.0
 WILLR_THRESHOLD_MIN = -100.0
 WILLR_THRESHOLD_MAX = 0.0
+# Classic NR7. The rank is high−low, strict, including today as one of the
+# N bars. N=4 is NR4 on the same predicate. Not true range.
+NR_N_DEFAULT = 7
 DONCHIAN_HIGH_DEFAULT = 20
 DONCHIAN_LOW_DEFAULT = 10
 # Connors Double Seven lookback. Any integer from 1 to 500, so 4–7 can be swept.
@@ -146,6 +164,7 @@ _TYPES = _WINDOWED | {
     "rsi_rising_n",
     "willr_lte",
     "willr_gte",
+    "nr_n",
     "donchian_high",
     "donchian_low",
     "close_lowest",
@@ -306,6 +325,13 @@ def validate_rules(rules: Any) -> dict[str, Any]:
                     WILLR_THRESHOLD_MIN,
                     WILLR_THRESHOLD_MAX,
                 )
+            elif ctype == "nr_n":
+                item["window"] = _as_int_in(
+                    _present(cond, "window", NR_N_DEFAULT),
+                    f"{side} nr_n window",
+                    _LOOKBACK_MIN,
+                    _LOOKBACK_MAX,
+                )
             elif ctype == "donchian_high":
                 item["window"] = _as_int_in(
                     _present(cond, "window", DONCHIAN_HIGH_DEFAULT),
@@ -385,7 +411,7 @@ def _canonical_trail(rules: dict[str, Any]) -> float | None:
 
 
 def windows_used(rules: dict[str, Any]) -> list[int]:
-    """Price-SMA windows. Volume, Donchian, close-extreme, RSI-slope, and Williams %R lookbacks are not."""
+    """Price-SMA windows. Volume, Donchian, close-extreme, RSI-slope, Williams %R, and narrow-range lookbacks are not."""
     found: set[int] = set()
     for side in _SIDES:
         for cond in rules.get(side, {}).get("conditions", []):
@@ -404,6 +430,7 @@ def signal_requirements(rules: dict[str, Any]) -> dict[str, Any]:
     rsi_falling: set[tuple[int, int]] = set()
     rsi_rising: set[tuple[int, int]] = set()
     willr: set[int] = set()
+    nr: set[int] = set()
     volume: set[int] = set()
     high: set[int] = set()
     low: set[int] = set()
@@ -423,6 +450,8 @@ def signal_requirements(rules: dict[str, Any]) -> dict[str, Any]:
                 rsi_rising.add((int(cond["period"]), int(cond["n"])))
             elif ctype in {"willr_lte", "willr_gte"}:
                 willr.add(int(cond["period"]))
+            elif ctype == "nr_n":
+                nr.add(int(cond["window"]))
             elif ctype == "rel_volume":
                 volume.add(int(cond["window"]))
             elif ctype == "donchian_high":
@@ -445,6 +474,7 @@ def signal_requirements(rules: dict[str, Any]) -> dict[str, Any]:
         "rsi_falling": [[period, n] for period, n in sorted(rsi_falling)],
         "rsi_rising": [[period, n] for period, n in sorted(rsi_rising)],
         "willr_periods": sorted(willr),
+        "nr_windows": sorted(nr),
         "volume_windows": sorted(volume),
         "donchian_high_windows": sorted(high),
         "donchian_low_windows": sorted(low),
@@ -472,6 +502,10 @@ class SignalView:
     rsi_rising: dict[tuple[int, int], float | None] = field(default_factory=dict)
     # period → Williams %R. Missing warm-up and a zero range are None.
     willr: dict[int, float | None] = field(default_factory=dict)
+    # Today's high−low. None when the bar has no range (missing, or high < low).
+    bar_range: float | None = None
+    # window → min high−low of the previous window−1 bars. Today is excluded.
+    range_prior_min: dict[int, float | None] = field(default_factory=dict)
     prior_high: dict[int, float | None] = field(default_factory=dict)
     prior_low: dict[int, float | None] = field(default_factory=dict)
     close_min: dict[int, float | None] = field(default_factory=dict)
@@ -531,6 +565,8 @@ def condition_true(cond: dict[str, Any], view: SignalView) -> bool:
         if ctype == "willr_lte":
             return value <= float(cond["threshold"])
         return value >= float(cond["threshold"])
+    if ctype == "nr_n":
+        return _narrower_than_prior(view.bar_range, int(cond["window"]), view.range_prior_min)
     if ctype == "donchian_high":
         level = view.prior_high.get(cond["window"])
         return level is not None and view.close > level
@@ -590,6 +626,25 @@ def trail_triggered(side: str, extreme: float, close: float, trail_pct: float) -
 
 def _finite(value: float) -> bool:
     return isinstance(value, (int, float)) and value == value and abs(value) != float("inf")
+
+
+def _narrower_than_prior(
+    rng: float | None, window: int, prior_mins: dict[int, float | None]
+) -> bool:
+    """True when `rng` is strictly below the prior window's minimum range.
+
+    Window 1 has no prior bar, so any finite range qualifies. A tie with the
+    prior minimum is false. A missing range or a hole in the prior window is
+    false. This is high−low, not true range.
+    """
+    if not _finite(rng):
+        return False
+    if window <= 1:
+        return True
+    prior = prior_mins.get(window)
+    if prior is None or not _finite(prior):
+        return False
+    return float(rng) < float(prior)
 
 
 def _at_extreme(close: float, level: float | None) -> bool:
