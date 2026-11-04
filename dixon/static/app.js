@@ -59,6 +59,8 @@
     ["rel_volume", "Rel volume ≥ k×SMA"],
     ["rsi_lte", "RSI ≤ threshold"],
     ["rsi_gte", "RSI ≥ threshold"],
+    ["rsi_falling_n", "RSI falling N bars"],
+    ["rsi_rising_n", "RSI rising N bars"],
     ["donchian_high", "Close > prior N high"],
     ["donchian_low", "Close < prior M low"],
     ["close_lowest", "Close is N-day low"],
@@ -72,6 +74,8 @@
     rel_volume: { k: 1.5, window: 20 },
     rsi_lte: { period: 2, threshold: 5 },
     rsi_gte: { period: 2, threshold: 70 },
+    rsi_falling_n: { period: 14, n: 3 },
+    rsi_rising_n: { period: 14, n: 3 },
     donchian_high: { window: 20 },
     donchian_low: { window: 10 },
     close_lowest: { window: 7 },
@@ -922,6 +926,10 @@
     return type === "rsi_lte" || type === "rsi_gte";
   }
 
+  function isRsiStreakType(type) {
+    return type === "rsi_falling_n" || type === "rsi_rising_n";
+  }
+
   function isDonchianType(type) {
     return type === "donchian_high" || type === "donchian_low";
   }
@@ -992,16 +1000,20 @@
         ).join("");
         const lookback = isEmaType(cond.type)
           ? cond.fast
-          : (isRsiType(cond.type) || isRocType(cond.type)
-            ? cond.period
-            : (isDonchianType(cond.type) || isCloseExtremeType(cond.type) || cond.type === "rel_volume" ? cond.window : ""));
+          : (isRsiStreakType(cond.type)
+            ? cond.n
+            : (isRsiType(cond.type) || isRocType(cond.type)
+              ? cond.period
+              : (isDonchianType(cond.type) || isCloseExtremeType(cond.type) || cond.type === "rel_volume" ? cond.window : "")));
         const showThreshold = isRsiType(cond.type) || isRocType(cond.type);
+        const streakPeriod = isRsiStreakType(cond.type) && cond.period != null ? cond.period : "";
         row.innerHTML =
           `<select class="cond-type">${typeOpts}</select>` +
           `<select class="cond-window">${winOpts}</select>` +
           `<input class="cond-stack" type="text" placeholder="5>20>50" value="${esc(cond.type === "ma_stack" ? formatStack(cond) : "")}" />` +
           `<input class="cond-k" type="number" step="0.1" min="0.1" placeholder="k" title="Volume multiple k" value="${esc(cond.type === "rel_volume" ? cond.k : "")}" />` +
           `<input class="cond-n" type="number" step="1" min="1" placeholder="N" title="Lookback N, RSI period, or ROC period" value="${esc(lookback == null ? "" : lookback)}" />` +
+          `<input class="cond-period" type="number" step="1" min="1" max="250" placeholder="period" title="Wilder RSI period. 14 is the chart RSI. This is not a z-score window." value="${esc(streakPeriod)}" />` +
           `<input class="cond-slow" type="number" step="1" min="1" max="500" placeholder="slow" title="Slow EMA span" value="${esc(isEmaType(cond.type) && cond.slow != null ? cond.slow : "")}" />` +
           `<input class="cond-threshold" type="number" step="0.1" placeholder="threshold" title="RSI or ROC threshold" value="${esc(showThreshold ? cond.threshold : "")}" />` +
           `<button type="button" class="secondary cond-del">Remove</button>`;
@@ -1016,6 +1028,7 @@
     const type = row.querySelector(".cond-type").value;
     const isRel = type === "rel_volume";
     const isRsi = isRsiType(type);
+    const isStreak = isRsiStreakType(type);
     const isDon = isDonchianType(type);
     const isClose = isCloseExtremeType(type);
     const isRoc = isRocType(type);
@@ -1023,7 +1036,8 @@
     row.querySelector(".cond-window").hidden = !conditionNeedsWindow(type);
     row.querySelector(".cond-stack").hidden = type !== "ma_stack";
     row.querySelector(".cond-k").hidden = !isRel;
-    row.querySelector(".cond-n").hidden = !(isRel || isRsi || isDon || isClose || isRoc || isEma);
+    row.querySelector(".cond-n").hidden = !(isRel || isRsi || isStreak || isDon || isClose || isRoc || isEma);
+    row.querySelector(".cond-period").hidden = !isStreak;
     row.querySelector(".cond-slow").hidden = !isEma;
     const threshold = row.querySelector(".cond-threshold");
     threshold.hidden = !(isRsi || isRoc);
@@ -1042,22 +1056,26 @@
     }
     const n = row.querySelector(".cond-n");
     if (isRel) n.placeholder = "N";
+    else if (isStreak) n.placeholder = "N";
     else if (isRsi || isRoc) n.placeholder = "period";
     else if (type === "donchian_high") n.placeholder = "N";
     else if (type === "donchian_low") n.placeholder = "M";
     else if (isClose) n.placeholder = "N";
     else if (isEma) n.placeholder = "fast";
-    n.title = isEma
-      ? "Fast EMA span"
-      : (isClose
-        ? "Sessions N. Today's close is the min or max of the last N closes, including today."
-        : "Lookback N, RSI period, or ROC period");
+    if (isEma) n.title = "Fast EMA span";
+    else if (isClose) n.title = "Sessions N. Today's close is the min or max of the last N closes, including today.";
+    else if (isStreak) {
+      n.title = "Consecutive bars N. Each bar's RSI is strictly below (falling) or above (rising) the previous RSI. An equal RSI breaks the streak. Not a z-score.";
+    } else n.title = "Lookback N, RSI period, or ROC period";
     if (!fillDefaults) return;
     const defaults = PREDICATE_DEFAULTS[type];
     if (!defaults) return;
     if (defaults.k != null) row.querySelector(".cond-k").value = defaults.k;
     if (defaults.window != null) n.value = defaults.window;
-    if (defaults.period != null) n.value = defaults.period;
+    if (isStreak) {
+      if (defaults.n != null) n.value = defaults.n;
+      if (defaults.period != null) row.querySelector(".cond-period").value = defaults.period;
+    } else if (defaults.period != null) n.value = defaults.period;
     if (defaults.threshold != null) row.querySelector(".cond-threshold").value = defaults.threshold;
     if (defaults.fast != null) n.value = defaults.fast;
     if (defaults.slow != null) row.querySelector(".cond-slow").value = defaults.slow;
@@ -1100,6 +1118,13 @@
             type,
             period: readRequiredInt(row.querySelector(".cond-n"), "RSI period"),
             threshold: readRequiredNumber(row.querySelector(".cond-threshold"), "RSI threshold"),
+          });
+        } else if (isRsiStreakType(type)) {
+          const which = type === "rsi_falling_n" ? "RSI falling" : "RSI rising";
+          conditions.push({
+            type,
+            period: readRequiredInt(row.querySelector(".cond-period"), which + " period"),
+            n: readRequiredInt(row.querySelector(".cond-n"), which + " N"),
           });
         } else if (isDonchianType(type)) {
           const label = type === "donchian_high" ? "Donchian N" : "Donchian M";
@@ -1250,6 +1275,18 @@
         },
         flat: { logic: "OR", conditions: [{ type: "close_highest", window: 7 }] },
         short: { logic: "AND", conditions: [] },
+      },
+    },
+    {
+      id: "rsiSlope",
+      label: "RSI(14) slope 3",
+      description:
+        "Slope of Wilder RSI(14), not a z-score of RSI and not the Connors level test. Long when RSI has risen for 3 consecutive bars (each RSI strictly above the previous bar). Short when RSI has fallen for 3 consecutive bars. An equal RSI breaks the streak. No trailing stop. Fills at the next open. The position is held when the streak ends, until the other side prints.",
+      filled: "RSI(14) slope 3 filled (long rising, short falling). Not a z-score of RSI. Save to keep it.",
+      rules: {
+        long: { logic: "AND", conditions: [{ type: "rsi_rising_n", period: 14, n: 3 }] },
+        flat: { logic: "AND", conditions: [] },
+        short: { logic: "AND", conditions: [{ type: "rsi_falling_n", period: 14, n: 3 }] },
       },
     },
   ];

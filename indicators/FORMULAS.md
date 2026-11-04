@@ -224,6 +224,40 @@ Same recursive EMA as `EMA_{n}` above (`ewm(span, adjust=False, min_periods=span
 
 A three-average stack is two pairwise conditions on the same side (`logic: AND`), for example EMA(9) > EMA(21) and EMA(21) > EMA(50).
 
+### RSI slope streak — `rsi_falling_n` / `rsi_rising_n`
+
+Same Wilder RSI as `RSI_{period}` (`rsi_wilder`). The signal bar's close is included. High, low, open, and volume are not. `n` counts **strict steps**, so the run ending at \(t\) reads \(n+1\) RSI values:
+
+\[
+\mathrm{Falling}(\mathrm{period}, n)_t
+  = \bigwedge_{k=0}^{n-1}
+    \bigl(\mathrm{RSI}(\mathrm{period})_{t-k} < \mathrm{RSI}(\mathrm{period})_{t-k-1}\bigr)
+\]
+\[
+\mathrm{Rising}(\mathrm{period}, n)_t
+  = \bigwedge_{k=0}^{n-1}
+    \bigl(\mathrm{RSI}(\mathrm{period})_{t-k} > \mathrm{RSI}(\mathrm{period})_{t-k-1}\bigr)
+\]
+
+- `rsi_falling_n`: the falling run. Defaults: period **14**, \(n\) **3**.
+- `rsi_rising_n`: the rising run. Same defaults.
+- Period is an integer from 1 to 250, the same bounds as `rsi_lte` / `rsi_gte`. \(n\) is an integer from 1 to 500. \(n = 1\) is the one-bar slope, \(\mathrm{RSI}_t < \mathrm{RSI}_{t-1}\) or the reverse. \(n = 3\) is three consecutive steps.
+- An equal RSI is not a step, so a flat print breaks the run. Warm-up (any of the \(n+1\) RSI values missing) → false.
+- These predicates are true only on the bars that complete the run. Under the hold-when-silent rule, the open side stays on after the streak ends until the opposite streak, a flat rule, or a trail. The same period cannot rise and fall on one bar. Two periods can, and that conflict goes flat.
+- The public pattern is `rsi_rising_n` period 14 \(n\) 3 on `long`, and `rsi_falling_n` with the same knobs on `short`. No `trail_pct`. US/HK cost defaults are unchanged.
+
+This is **not** a z-score of RSI, and it is not `rsi_lte` / `rsi_gte`.
+
+A z-score of the RSI level (backlog S1-K16, not implemented) would be
+
+\[
+z_t(W) = \frac{\mathrm{RSI}_t - \mu_W(\mathrm{RSI})_t}{\sigma_W(\mathrm{RSI})_t}
+\]
+
+with \(\mu_W\) and \(\sigma_W\) the mean and standard deviation of RSI over a window \(W\). The sign of \(z\) is the sign of \(\mathrm{RSI}_t - \mu_W\): the level versus its own recent history. \(N\) on the slope streak is not that window.
+
+A high RSI can still be falling. Readings that sit at 50 and then print 80, 78, 76, 74 are a 3-step fall, so `rsi_falling_n` with \(n = 3\) is true on the last bar, while those readings are above a trailing mean near 55, so \(z > 0\). A later 40, 42, 44, 46 is a 3-step rise, so `rsi_rising_n` is true and `rsi_falling_n` is false, while 46 is still below that mean, so \(z < 0\). `rsi_lte` / `rsi_gte` only compare the level with a constant threshold. They do not look at the slope either.
+
 ### Trailing stop — `trail_pct`
 
 Optional number on the rules object, not a condition. Percent points: `5` means 5%. Omit or null to disable.

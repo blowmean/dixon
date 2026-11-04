@@ -117,6 +117,41 @@ def rsi_wilder(close: pd.Series, period: int = 14) -> pd.Series:
     return rsi
 
 
+def slope_streak_flags(values: pd.Series, n: int, *, falling: bool) -> pd.Series:
+    """1.0 where `values` strictly rose or fell on each of the last `n` steps.
+
+    `n` counts comparisons. The run ending at t uses n+1 samples:
+    value_t ? value_{t-1} ? … ? value_{t-n}, with `<` when `falling` and `>`
+    otherwise. An equal step is not a step. A missing sample breaks the run.
+    Completed runs are 1.0. Warm-up and failed runs are NaN.
+
+    This is the operator behind `rsi_falling_n` / `rsi_rising_n`. It is the
+    slope of the series. It is not a z-score: a z-score subtracts a rolling
+    mean and divides by a rolling standard deviation of the level.
+    """
+    cur = pd.to_numeric(values, errors="coerce")
+    prev = cur.shift(1)
+    finite = cur.notna() & prev.notna()
+    step = (cur < prev) if falling else (cur > prev)
+    step = step & finite
+    hits = step.astype(float).rolling(window=int(n), min_periods=int(n)).sum()
+    done = hits == float(n)
+    out = pd.Series(np.nan, index=cur.index, dtype=float)
+    return out.mask(done, 1.0)
+
+
+def rsi_slope_streak(close: pd.Series, period: int, n: int, *, falling: bool) -> pd.Series:
+    """Wilder RSI slope run. Reuses `rsi_wilder` — there is no second RSI.
+
+    `falling=True` is RSI falling for `n` consecutive bars (each RSI strictly
+    below the previous bar's RSI). `falling=False` is the rising sibling.
+    High, low, open, and volume do not enter. A flat RSI step breaks the run.
+    Not a z-score of RSI, and not the `rsi_lte` / `rsi_gte` level test.
+    """
+    px = pd.to_numeric(close, errors="coerce")
+    return slope_streak_flags(rsi_wilder(px, period), n, falling=falling)
+
+
 def macd_series(
     close: pd.Series, fast: int = 12, slow: int = 26, signal: int = 9
 ) -> tuple[pd.Series, pd.Series, pd.Series]:
