@@ -61,6 +61,8 @@
     ["rsi_gte", "RSI ≥ threshold"],
     ["rsi_falling_n", "RSI falling N bars"],
     ["rsi_rising_n", "RSI rising N bars"],
+    ["willr_lte", "Williams %R ≤ threshold"],
+    ["willr_gte", "Williams %R ≥ threshold"],
     ["donchian_high", "Close > prior N high"],
     ["donchian_low", "Close < prior M low"],
     ["close_lowest", "Close is N-day low"],
@@ -76,6 +78,8 @@
     rsi_gte: { period: 2, threshold: 70 },
     rsi_falling_n: { period: 14, n: 3 },
     rsi_rising_n: { period: 14, n: 3 },
+    willr_lte: { period: 7, threshold: -95 },
+    willr_gte: { period: 7, threshold: -5 },
     donchian_high: { window: 20 },
     donchian_low: { window: 10 },
     close_lowest: { window: 7 },
@@ -930,6 +934,10 @@
     return type === "rsi_falling_n" || type === "rsi_rising_n";
   }
 
+  function isWillrType(type) {
+    return type === "willr_lte" || type === "willr_gte";
+  }
+
   function isDonchianType(type) {
     return type === "donchian_high" || type === "donchian_low";
   }
@@ -1002,10 +1010,10 @@
           ? cond.fast
           : (isRsiStreakType(cond.type)
             ? cond.n
-            : (isRsiType(cond.type) || isRocType(cond.type)
+            : (isRsiType(cond.type) || isRocType(cond.type) || isWillrType(cond.type)
               ? cond.period
               : (isDonchianType(cond.type) || isCloseExtremeType(cond.type) || cond.type === "rel_volume" ? cond.window : "")));
-        const showThreshold = isRsiType(cond.type) || isRocType(cond.type);
+        const showThreshold = isRsiType(cond.type) || isRocType(cond.type) || isWillrType(cond.type);
         const streakPeriod = isRsiStreakType(cond.type) && cond.period != null ? cond.period : "";
         row.innerHTML =
           `<select class="cond-type">${typeOpts}</select>` +
@@ -1015,7 +1023,7 @@
           `<input class="cond-n" type="number" step="1" min="1" placeholder="N" title="Lookback N, RSI period, or ROC period" value="${esc(lookback == null ? "" : lookback)}" />` +
           `<input class="cond-period" type="number" step="1" min="1" max="250" placeholder="period" title="Wilder RSI period. 14 is the chart RSI. This is not a z-score window." value="${esc(streakPeriod)}" />` +
           `<input class="cond-slow" type="number" step="1" min="1" max="500" placeholder="slow" title="Slow EMA span" value="${esc(isEmaType(cond.type) && cond.slow != null ? cond.slow : "")}" />` +
-          `<input class="cond-threshold" type="number" step="0.1" placeholder="threshold" title="RSI or ROC threshold" value="${esc(showThreshold ? cond.threshold : "")}" />` +
+          `<input class="cond-threshold" type="number" step="0.1" placeholder="threshold" title="Threshold" value="${esc(showThreshold ? cond.threshold : "")}" />` +
           `<button type="button" class="secondary cond-del">Remove</button>`;
         box.appendChild(row);
         syncCondRow(row, false);
@@ -1029,6 +1037,7 @@
     const isRel = type === "rel_volume";
     const isRsi = isRsiType(type);
     const isStreak = isRsiStreakType(type);
+    const isWillr = isWillrType(type);
     const isDon = isDonchianType(type);
     const isClose = isCloseExtremeType(type);
     const isRoc = isRocType(type);
@@ -1036,17 +1045,23 @@
     row.querySelector(".cond-window").hidden = !conditionNeedsWindow(type);
     row.querySelector(".cond-stack").hidden = type !== "ma_stack";
     row.querySelector(".cond-k").hidden = !isRel;
-    row.querySelector(".cond-n").hidden = !(isRel || isRsi || isStreak || isDon || isClose || isRoc || isEma);
+    row.querySelector(".cond-n").hidden = !(isRel || isRsi || isStreak || isWillr || isDon || isClose || isRoc || isEma);
     row.querySelector(".cond-period").hidden = !isStreak;
     row.querySelector(".cond-slow").hidden = !isEma;
     const threshold = row.querySelector(".cond-threshold");
-    threshold.hidden = !(isRsi || isRoc);
+    threshold.hidden = !(isRsi || isRoc || isWillr);
     if (isRoc) {
       threshold.min = "-100";
       threshold.max = "10000";
       threshold.step = "0.1";
       threshold.placeholder = "±%";
       threshold.title = "ROC threshold in percent points. 1 means +1%.";
+    } else if (isWillr) {
+      threshold.min = "-100";
+      threshold.max = "0";
+      threshold.step = "0.1";
+      threshold.placeholder = "threshold";
+      threshold.title = "Williams %R threshold, inclusive ≤ or ≥, from −100 (close at the N-bar low) to 0 (close at the N-bar high). The public lines are −95 and −5.";
     } else {
       threshold.min = "0";
       threshold.max = "100";
@@ -1056,13 +1071,14 @@
     }
     const n = row.querySelector(".cond-n");
     if (isRel) n.placeholder = "N";
-    else if (isStreak) n.placeholder = "N";
+    else if (isStreak || isWillr) n.placeholder = "N";
     else if (isRsi || isRoc) n.placeholder = "period";
     else if (type === "donchian_high") n.placeholder = "N";
     else if (type === "donchian_low") n.placeholder = "M";
     else if (isClose) n.placeholder = "N";
     else if (isEma) n.placeholder = "fast";
     if (isEma) n.title = "Fast EMA span";
+    else if (isWillr) n.title = "Williams %R lookback N. The window includes today's high, low, and close. The public pattern uses 7.";
     else if (isClose) n.title = "Sessions N. Today's close is the min or max of the last N closes, including today.";
     else if (isStreak) {
       n.title = "Consecutive bars N. Each bar's RSI is strictly below (falling) or above (rising) the previous RSI. An equal RSI breaks the streak. Not a z-score.";
@@ -1125,6 +1141,13 @@
             type,
             period: readRequiredInt(row.querySelector(".cond-period"), which + " period"),
             n: readRequiredInt(row.querySelector(".cond-n"), which + " N"),
+          });
+        } else if (isWillrType(type)) {
+          const which = type === "willr_lte" ? "Williams %R ≤" : "Williams %R ≥";
+          conditions.push({
+            type,
+            period: readRequiredInt(row.querySelector(".cond-n"), which + " N"),
+            threshold: readRequiredNumber(row.querySelector(".cond-threshold"), which + " threshold"),
           });
         } else if (isDonchianType(type)) {
           const label = type === "donchian_high" ? "Donchian N" : "Donchian M";
@@ -1287,6 +1310,30 @@
         long: { logic: "AND", conditions: [{ type: "rsi_rising_n", period: 14, n: 3 }] },
         flat: { logic: "AND", conditions: [] },
         short: { logic: "AND", conditions: [{ type: "rsi_falling_n", period: 14, n: 3 }] },
+      },
+    },
+    {
+      id: "willr",
+      label: "Williams %R(7)",
+      description:
+        "StatOasis scout. Long when Williams %R(7) is −95 or lower. Exit when %R(7) is −5 or higher. The compare is inclusive (≤ and ≥), the same as the RSI threshold tests: a print of exactly −95 is a long, and exactly −5 is an exit. Between −95 and −5 the open position is held. The window is the last 7 highs and lows, including today. A day whose high equals its low does not fire. No trailing stop. Fills at the next open.",
+      filled: "Williams %R(7) filled (long ≤ −95, exit ≥ −5). Save to keep it.",
+      rules: {
+        long: { logic: "AND", conditions: [{ type: "willr_lte", period: 7, threshold: -95 }] },
+        flat: { logic: "OR", conditions: [{ type: "willr_gte", period: 7, threshold: -5 }] },
+        short: { logic: "AND", conditions: [] },
+      },
+    },
+    {
+      id: "willrClassic",
+      label: "Williams %R(14) classic",
+      description:
+        "Textbook Williams lines, kept as a second preset. Long when %R(14) is −80 or lower. Exit when %R(14) is −20 or higher. Inclusive ≤ and ≥. The window includes today. No trailing stop. Fills at the next open. The primary public pattern is Williams %R(7) at −95 and −5.",
+      filled: "Williams %R(14) classic filled (long ≤ −80, exit ≥ −20). Save to keep it.",
+      rules: {
+        long: { logic: "AND", conditions: [{ type: "willr_lte", period: 14, threshold: -80 }] },
+        flat: { logic: "OR", conditions: [{ type: "willr_gte", period: 14, threshold: -20 }] },
+        short: { logic: "AND", conditions: [] },
       },
     },
   ];

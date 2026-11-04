@@ -15,6 +15,13 @@ Condition types:
                                Equality breaks the run. This is the slope of
                                RSI, not a z-score of the RSI level, and not
                                the threshold tests above.
+  willr_lte, willr_gte         Williams %R(period) <= or >= threshold (inclusive,
+                               the same as rsi_lte / rsi_gte).
+                               %R = (highest high − close) / (highest high − lowest low) × −100
+                               over the last `period` bars, including today.
+                               Defaults period=7, threshold −95 (lte) or −5 (gte).
+                               A zero high-low range is false. Not Donchian and
+                               not stochastic %K.
   donchian_high                close > max high of the previous `window` bars (default 20)
   donchian_low                 close < min low of the previous `window` bars (default 10)
   close_lowest                 close equals the min close of the last `window` bars,
@@ -65,6 +72,16 @@ holds the open side until the opposite streak, a flat rule, or a trail.
 The same period cannot both rise and fall on one bar. Two different periods
 can, and that conflict goes flat. The public pattern is long on a 3-bar rise
 of RSI(14) and short on a 3-bar fall, with no trail.
+
+Williams %R is a level test, the same shape as `rsi_lte` / `rsi_gte`, on the
+negative oscillator. The compares are inclusive: a reading equal to the
+threshold is true. The window is the last N highs and lows including today,
+so a close on the high is 0 and a close on the low is −100. The public
+pattern (StatOasis scout) is long when %R(7) <= −95 and flat when %R(7) >= −5.
+The band between those lines holds the open side. A second preset, Williams
+%R(14) classic, writes −80 and −20 explicitly. A flat high-low range does not
+fire. There is no trail. Donchian still drops today and compares the close
+with a prior extreme; %R does not.
 """
 
 from __future__ import annotations
@@ -86,6 +103,15 @@ RSI_GTE_THRESHOLD_DEFAULT = 70.0
 # RSI_t ? RSI_{t-1} ? RSI_{t-2} ? RSI_{t-3}), not a z-score window.
 RSI_SLOPE_PERIOD_DEFAULT = 14
 RSI_SLOPE_N_DEFAULT = 3
+# Public Williams %R pattern (StatOasis scout). Period 7 includes today's
+# high, low, and close. Compares are inclusive. −95 is the long line.
+# −5 is the flat exit. The classic −80 / −20 lines are a separate preset,
+# not these omitted-knob defaults.
+WILLR_PERIOD_DEFAULT = 7
+WILLR_LTE_THRESHOLD_DEFAULT = -95.0
+WILLR_GTE_THRESHOLD_DEFAULT = -5.0
+WILLR_THRESHOLD_MIN = -100.0
+WILLR_THRESHOLD_MAX = 0.0
 DONCHIAN_HIGH_DEFAULT = 20
 DONCHIAN_LOW_DEFAULT = 10
 # Connors Double Seven lookback. Any integer from 1 to 500, so 4–7 can be swept.
@@ -118,6 +144,8 @@ _TYPES = _WINDOWED | {
     "rsi_gte",
     "rsi_falling_n",
     "rsi_rising_n",
+    "willr_lte",
+    "willr_gte",
     "donchian_high",
     "donchian_low",
     "close_lowest",
@@ -260,6 +288,24 @@ def validate_rules(rules: Any) -> dict[str, Any]:
                     _LOOKBACK_MIN,
                     _LOOKBACK_MAX,
                 )
+            elif ctype in {"willr_lte", "willr_gte"}:
+                default_threshold = (
+                    WILLR_LTE_THRESHOLD_DEFAULT
+                    if ctype == "willr_lte"
+                    else WILLR_GTE_THRESHOLD_DEFAULT
+                )
+                item["period"] = _as_int_in(
+                    _present(cond, "period", WILLR_PERIOD_DEFAULT),
+                    f"{side} {ctype} period",
+                    _LOOKBACK_MIN,
+                    _LOOKBACK_MAX,
+                )
+                item["threshold"] = _as_float_in(
+                    _present(cond, "threshold", default_threshold),
+                    f"{side} {ctype} threshold",
+                    WILLR_THRESHOLD_MIN,
+                    WILLR_THRESHOLD_MAX,
+                )
             elif ctype == "donchian_high":
                 item["window"] = _as_int_in(
                     _present(cond, "window", DONCHIAN_HIGH_DEFAULT),
@@ -339,7 +385,7 @@ def _canonical_trail(rules: dict[str, Any]) -> float | None:
 
 
 def windows_used(rules: dict[str, Any]) -> list[int]:
-    """Price-SMA windows. Volume, Donchian, close-extreme, and RSI-slope lookbacks are not."""
+    """Price-SMA windows. Volume, Donchian, close-extreme, RSI-slope, and Williams %R lookbacks are not."""
     found: set[int] = set()
     for side in _SIDES:
         for cond in rules.get(side, {}).get("conditions", []):
@@ -357,6 +403,7 @@ def signal_requirements(rules: dict[str, Any]) -> dict[str, Any]:
     rsi: set[int] = set()
     rsi_falling: set[tuple[int, int]] = set()
     rsi_rising: set[tuple[int, int]] = set()
+    willr: set[int] = set()
     volume: set[int] = set()
     high: set[int] = set()
     low: set[int] = set()
@@ -374,6 +421,8 @@ def signal_requirements(rules: dict[str, Any]) -> dict[str, Any]:
                 rsi_falling.add((int(cond["period"]), int(cond["n"])))
             elif ctype == "rsi_rising_n":
                 rsi_rising.add((int(cond["period"]), int(cond["n"])))
+            elif ctype in {"willr_lte", "willr_gte"}:
+                willr.add(int(cond["period"]))
             elif ctype == "rel_volume":
                 volume.add(int(cond["window"]))
             elif ctype == "donchian_high":
@@ -395,6 +444,7 @@ def signal_requirements(rules: dict[str, Any]) -> dict[str, Any]:
         "rsi_periods": sorted(rsi),
         "rsi_falling": [[period, n] for period, n in sorted(rsi_falling)],
         "rsi_rising": [[period, n] for period, n in sorted(rsi_rising)],
+        "willr_periods": sorted(willr),
         "volume_windows": sorted(volume),
         "donchian_high_windows": sorted(high),
         "donchian_low_windows": sorted(low),
@@ -420,6 +470,8 @@ class SignalView:
     # (period, n) → 1.0 when that Wilder RSI completed an n-step slope run.
     rsi_falling: dict[tuple[int, int], float | None] = field(default_factory=dict)
     rsi_rising: dict[tuple[int, int], float | None] = field(default_factory=dict)
+    # period → Williams %R. Missing warm-up and a zero range are None.
+    willr: dict[int, float | None] = field(default_factory=dict)
     prior_high: dict[int, float | None] = field(default_factory=dict)
     prior_low: dict[int, float | None] = field(default_factory=dict)
     close_min: dict[int, float | None] = field(default_factory=dict)
@@ -472,6 +524,13 @@ def condition_true(cond: dict[str, Any], view: SignalView) -> bool:
         slot = view.rsi_falling if ctype == "rsi_falling_n" else view.rsi_rising
         flag = slot.get(key)
         return flag is not None and flag == 1.0
+    if ctype in {"willr_lte", "willr_gte"}:
+        value = view.willr.get(int(cond["period"]))
+        if value is None:
+            return False
+        if ctype == "willr_lte":
+            return value <= float(cond["threshold"])
+        return value >= float(cond["threshold"])
     if ctype == "donchian_high":
         level = view.prior_high.get(cond["window"])
         return level is not None and view.close > level

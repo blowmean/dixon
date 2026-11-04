@@ -1,0 +1,185 @@
+{
+  "book": "long willr_lte / flat willr_gte",
+  "compare": "inclusive",
+  "costs": "us-v1.2-defaults",
+  "end": "2024-01-22",
+  "exit_threshold": -5,
+  "long_threshold": -95,
+  "note": "StatOasis scout %R(7) \u2264 \u221295 / \u2265 \u22125; includes today; next open; US default costs",
+  "period": 7,
+  "result": {
+    "currency": "USD",
+    "equity_curve": [
+      {
+        "cash": 100000.0,
+        "date": "2024-01-02",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-01-03",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-01-04",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-01-05",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-01-06",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-01-07",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-01-08",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 100000.0,
+        "date": "2024-01-09",
+        "equity": 100000.0,
+        "side": "flat"
+      },
+      {
+        "cash": 79987.916667,
+        "date": "2024-01-10",
+        "equity": 100821.25,
+        "side": "long"
+      },
+      {
+        "cash": 79987.916667,
+        "date": "2024-01-11",
+        "equity": 100821.25,
+        "side": "long"
+      },
+      {
+        "cash": 79987.916667,
+        "date": "2024-01-12",
+        "equity": 100821.25,
+        "side": "long"
+      },
+      {
+        "cash": 79987.916667,
+        "date": "2024-01-13",
+        "equity": 119987.916667,
+        "side": "long"
+      },
+      {
+        "cash": 101641.666667,
+        "date": "2024-01-14",
+        "equity": 101641.666667,
+        "side": "flat"
+      },
+      {
+        "cash": 101641.666667,
+        "date": "2024-01-15",
+        "equity": 101641.666667,
+        "side": "flat"
+      },
+      {
+        "cash": 101641.666667,
+        "date": "2024-01-16",
+        "equity": 101641.666667,
+        "side": "flat"
+      },
+      {
+        "cash": 101641.666667,
+        "date": "2024-01-17",
+        "equity": 101641.666667,
+        "side": "flat"
+      },
+      {
+        "cash": 101641.666667,
+        "date": "2024-01-18",
+        "equity": 101641.666667,
+        "side": "flat"
+      },
+      {
+        "cash": 101641.666667,
+        "date": "2024-01-19",
+        "equity": 101641.666667,
+        "side": "flat"
+      },
+      {
+        "cash": 101641.666667,
+        "date": "2024-01-20",
+        "equity": 101641.666667,
+        "side": "flat"
+      },
+      {
+        "cash": 101641.666667,
+        "date": "2024-01-21",
+        "equity": 101641.666667,
+        "side": "flat"
+      },
+      {
+        "cash": 81300.959565,
+        "date": "2024-01-22",
+        "equity": 103396.974058,
+        "side": "long"
+      }
+    ],
+    "metrics": {
+      "ending_equity": 103396.974058,
+      "max_drawdown": 0.15290081,
+      "max_drawdown_meets_target": false,
+      "max_drawdown_target": 0.1,
+      "total_pnl": 3396.974058,
+      "total_return": 0.03396974,
+      "trade_count": 1,
+      "win_rate": 1.0,
+      "win_rate_meets_target": true,
+      "win_rate_target": 0.5
+    },
+    "open_position": {
+      "entry_date": "2024-01-22",
+      "entry_price": 46.0,
+      "mark": 50.0,
+      "notional": 20328.333333,
+      "shares": 441.92028986,
+      "side": "long",
+      "symbol": "AAPL",
+      "unrealized_pnl": 1755.307391
+    },
+    "starting_capital": 100000.0,
+    "trades": [
+      {
+        "entry_commission": 2.083333,
+        "entry_date": "2024-01-10",
+        "entry_price": 48.0,
+        "entry_slippage": 10.0,
+        "exit_commission": 2.083333,
+        "exit_date": "2024-01-14",
+        "exit_price": 52.0,
+        "exit_reason": "signal",
+        "exit_slippage": 10.833333,
+        "notional": 20000.0,
+        "pnl": 1641.666667,
+        "return_on_notional": 0.08208333,
+        "shares": 416.66666667,
+        "side": "long",
+        "symbol": "AAPL"
+      }
+    ]
+  },
+  "start": "2024-01-02",
+  "symbol": "AAPL"
+}
