@@ -56,6 +56,40 @@ def prior_low(low: pd.Series, window: int) -> pd.Series:
     return pd.to_numeric(low, errors="coerce").shift(1).rolling(window, min_periods=window).min()
 
 
+def bar_range(high: pd.Series, low: pd.Series) -> pd.Series:
+    """Session range, high minus low.
+
+    This is the Crabel narrow-range input. It is not true range: the previous
+    close does not enter, so a gap does not widen the bar. A negative print
+    (high below low) is missing, not a range. A zero print (high equals low)
+    is kept on the series. `nr_n` then rejects that bar. Not written to
+    `indicator_cache`.
+    """
+    h = pd.to_numeric(high, errors="coerce")
+    lo = pd.to_numeric(low, errors="coerce")
+    rng = h - lo
+    return rng.mask(rng < 0)
+
+
+def rolling_range_min(high: pd.Series, low: pd.Series, window: int) -> pd.Series:
+    """Minimum high-low of the last `window` bars, including today.
+
+    Same window as `rolling_close_min`, on `bar_range` instead of close.
+    `nr_n` is true when today's range equals this level and is positive.
+    A tie therefore counts. A zero range can be the minimum; the predicate
+    still rejects the bar whose own range is zero.
+
+    Any missing range inside the window leaves the level NaN. The rolling
+    minimum would otherwise skip the hole and rank the bars that remain.
+    Not true range, and not written to `indicator_cache`.
+    """
+    n = int(window)
+    rng = bar_range(high, low)
+    covered = rng.notna().astype(float).rolling(n, min_periods=n).sum() == float(n)
+    mins = rng.rolling(n, min_periods=n).min()
+    return mins.where(covered)
+
+
 def williams_r(high: pd.Series, low: pd.Series, close: pd.Series, period: int) -> pd.Series:
     """Williams %R over `period` bars, including the current bar.
 

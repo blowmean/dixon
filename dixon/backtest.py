@@ -35,9 +35,11 @@ from dixon.compute_indicators import (
     ema,
     ensure_indicators,
     indicator_map,
+    bar_range,
     load_ohlc,
     prior_high,
     prior_low,
+    rolling_range_min,
     rate_of_change,
     rolling_close_max,
     rolling_close_min,
@@ -344,6 +346,19 @@ def run_backtest(
         )
         for period in reqs["willr_periods"]
     } if not bars.empty else {}
+    # High−low rank. Today's range equals the min of the last N ranges,
+    # including today. A zero range is excluded by the predicate. Not true
+    # range, and not a cached indicator.
+    nr_windows = [int(w) for w in reqs["nr_windows"]]
+    range_min_maps = {
+        w: series_by_date(bars["bar_date"], rolling_range_min(bars["high"], bars["low"], w))
+        for w in nr_windows
+    } if not bars.empty else {}
+    range_by_date = (
+        series_by_date(bars["bar_date"], bar_range(bars["high"], bars["low"]))
+        if not bars.empty and nr_windows
+        else {}
+    )
     trail_pct = rules.get("trail_pct")
 
     spikes: set[date] = set()
@@ -410,6 +425,10 @@ def run_backtest(
                     },
                     willr={
                         p: willr_maps[p].get(bar_date) for p in reqs["willr_periods"]
+                    },
+                    bar_range=range_by_date.get(bar_date),
+                    range_min={
+                        w: range_min_maps[w].get(bar_date) for w in nr_windows
                     },
                     prior_high={
                         w: high_maps[w].get(bar_date) for w in reqs["donchian_high_windows"]
